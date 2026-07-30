@@ -2,7 +2,7 @@
   <img src="public/images/bambups_logo.png" alt="BambuPS logo" width="200">
 </p>
 
-# 🎋 BambuPS
+# BambuPS (Bambu Print Server)
 
 Self-hosted webová appka pro správu tiskáren **Bambu Lab** (X1C, X1E, P1, A1 a další) přes lokální síť — bez závislosti na cloudu Bambu Lab.
 
