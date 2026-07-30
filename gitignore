@@ -1,0 +1,37 @@
+/vendor
+/node_modules
+/public/build
+/public/hot
+/public/storage
+
+# Prostředí a klíče - nikdy nesmí do repozitáře
+.env
+.env.backup
+.env.production
+/storage/*.key
+
+# Runtime data - specifické pro každou instalaci
+/storage/app/cameras/*
+!/storage/app/cameras/.gitkeep
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/testing/*
+/storage/framework/views/*
+/storage/logs/*.log
+!/storage/logs/.gitkeep
+/bootstrap/cache/*.php
+!/bootstrap/cache/.gitignore
+
+# Standardní vývojářské věci
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/auth.json
+.DS_Store
+.fleet
+.idea
+.nova
+.vscode
+.zed
