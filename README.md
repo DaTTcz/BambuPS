@@ -1,58 +1,97 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
-
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <img src="public/images/bambups_logo.png" alt="BambuPS logo" width="200">
 </p>
 
-## About Laravel
+# 🎋 BambuPS
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Self-hosted webová appka pro správu tiskáren **Bambu Lab** (X1C, X1E, P1, A1 a další) přes lokální síť — bez závislosti na cloudu Bambu Lab.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Postavená na Laravel 13 + Livewire + Alpine.js/Tailwind CSS. Ovládá tiskárny přímo přes MQTT/FTP v tvé vlastní síti, ukládá a organizuje tiskové soubory, streamuje kamery, dekóduje chybové HMS kódy a posílá notifikace.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## ✨ Funkce
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- **Správa tiskáren** — víc tiskáren najednou, live status (teploty, průběh tisku, WiFi signál...)
+- **Tisk s AMS** — automatické i ruční mapování filamentů na AMS sloty, podpora více AMS jednotek
+- **Volba typu podložky** za běhu — appka umí přepočítat a upravit teplotu podložky v gcode podle zvoleného typu, i po naslicování
+- **Správa souborů** — organizace do složek, náhledy jednotlivých desek, přejmenování/přesun/smazání, opětovné naparsování metadat
+- **Kamera** — živý stream přes [go2rtc](https://github.com/AlexxIT/go2rtc), automaticky se nastaví při přidání tiskárny
+- **Notifikace** — e-mail, Telegram, MQTT při dokončení/selhání tisku, HMS chybách, docházejícím filamentu
+- **HMS diagnostika** — dekódování chybových kódů tiskárny do srozumitelných hlášek (čeština)
+- **Ovládání v reálném čase** — teploty, světla, pohyb os, rychlost tisku, pauza/pokračování/zastavení
+- **Tmavý/světlý režim** s uložením preference
+- **Automatická kontrola aktualizací** — appka si sama zkontroluje novou verzi na GitHubu a nabídne update jedním klikem
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## 📋 Požadavky
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+- Ubuntu Server 22.04+ (nebo jiná Debian-based distribuce)
+- Tiskárna Bambu Lab s aktivním **LAN Only Mode** a **Developer Mode** (Nastavení → síť na displeji tiskárny)
+- Root/sudo přístup na serveru
+- Server ve stejné síti jako tiskárna(y)
 
-## Agentic Development
+## 🚀 Instalace
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+Nejjednodušší cesta — stáhni a spusť instalátor:
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+curl -O https://raw.githubusercontent.com/DaTTcz/BambuPS/main/install-clean.sh
+sudo bash install-clean.sh
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Skript se zeptá na pár základních věcí (IP/doména serveru, porty) a zařídí kompletně vše:
+- Nainstaluje závislosti (PHP 8.5, nginx, MariaDB, Node.js, Supervisor, ffmpeg, go2rtc)
+- Naklonuje appku a nastaví databázi
+- Vygeneruje self-signed SSL certifikát
+- Nastaví nginx, PHP-FPM a supervisor démony
+- Na konci tě interaktivně provede vytvořením prvního administrátorského účtu
 
-## Contributing
+Po dokončení appku najdeš na `https://<tvoje-IP>:<port>` a přihlásíš se účtem, který jsi právě vytvořil. Zbytek — přidání tiskáren, zapnutí modulů (kamera, MQTT, notifikace) — už probíhá přímo přes webové rozhraní appky.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## 🔄 Aktualizace
 
-## Code of Conduct
+Appka si sama hlídá nové verze (odznak v horním menu). Kliknutím na "aktualizovat" appka:
+1. Stáhne novou verzi z GitHubu (`git fetch` + `checkout`)
+2. Aktualizuje PHP závislosti a přebuilduje frontend
+3. Spustí databázové migrace
+4. Vyčistí cache
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Průběh vidíš živě v appce, žádný ruční zásah na serveru není potřeba.
 
-## Security Vulnerabilities
+## 🖨️ Kompatibilita
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Vyvíjeno a testováno primárně na **Bambu Lab X1 Carbon** a **X1E**. Měla by fungovat i s P1/A1 řadou, ale bez záruky — pokud narazíš na problém specifický pro tvůj model, otevři prosím issue.
 
-## License
+## 🛠️ Technologie
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- **Backend:** PHP 8.5, Laravel 13, Jetstream, Livewire 3
+- **Frontend:** Alpine.js, Tailwind CSS
+- **Databáze:** MariaDB
+- **Web server:** nginx + PHP-FPM
+- **Procesy na pozadí:** Supervisor (MQTT listener, go2rtc, kamery)
+- **MQTT klient:** [php-mqtt/client](https://github.com/php-mqtt/client)
+- **Kamera:** [go2rtc](https://github.com/AlexxIT/go2rtc)
+
+## 📖 Jak appka komunikuje s tiskárnou
+
+BambuPS mluví s tiskárnou přímo přes lokální MQTT (port 8883, TLS) a FTPS (port 990) — stejný protokol, jaký používá oficiální Bambu Studio v LAN režimu. Žádná data neopouští tvoji síť.
+
+Formát MQTT příkazů byl z velké části zpětně odvozen a ověřen porovnáním proti [OpenBambuAPI](https://github.com/Doridian/OpenBambuAPI) dokumentaci a [Bambuddy](https://github.com/maziggy/bambuddy) (děkujeme za inspiraci a otevřený zdrojový kód, který pomohl vyladit nejeden detail).
+
+## ⚠️ Prohlášení
+
+Tohle je neoficiální, komunitní projekt. Není přidružený k Bambu Lab. Používáš na vlastní riziko — appka posílá příkazy přímo tiskárně, a i když je to navržené bezpečně, doporučujeme mít oči na tiskárně při prvních tiscích s novou appkou.
+
+## 📄 Licence
+
+[PolyForm Noncommercial 1.0.0](LICENSE) — appku smíš volně používat, upravovat a sdílet pro nekomerční účely (osobní, vzdělávací, hobby). **Komerční využití vyžaduje svolení autora** — ozvi se přes GitHub, domluvíme se.
+
+## 🙏 Poděkování
+
+- [Bambu Lab](https://bambulab.com) za skvělé tiskárny
+- Komunitě kolem [OpenBambuAPI](https://github.com/Doridian/OpenBambuAPI) a [Bambuddy](https://github.com/maziggy/bambuddy) za zpětně odvozenou dokumentaci protokolu
+- Vytvořeno s pomocí Claude (Anthropic)
+
+---
+
+Vytvořil [David Trubka](https://github.com/DaTTcz)
