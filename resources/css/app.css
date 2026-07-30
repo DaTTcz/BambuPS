@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+[x-cloak] { display: none; }
+
+/* ===== LOGO ===== */
+.logo-dark { display: none; }
+.dark .logo-light { display: none !important; }
+.dark .logo-dark { display: block !important; }
+
+/* ===== BAMBU GREEN – LIGHT MODE ===== */
+.bg-blue-600, .bg-blue-500 { background-color: #1DB954 !important; }
+.hover\:bg-blue-700:hover, .hover\:bg-blue-600:hover { background-color: #17A145 !important; }
+.text-blue-600 { color: #1DB954 !important; }
+.text-blue-700 { color: #17A145 !important; }
+.text-blue-800 { color: #0F7A38 !important; }
+.border-blue-500 { border-color: #1DB954 !important; }
+.border-blue-300 { border-color: #5DD99A !important; }
+.bg-blue-50 { background-color: #EDFBF3 !important; }
+.bg-blue-100 { background-color: #D6F5E5 !important; }
+.hover\:bg-blue-50:hover { background-color: #EDFBF3 !important; }
+.hover\:bg-blue-100:hover { background-color: #D6F5E5 !important; }
+.hover\:bg-blue-200:hover { background-color: #AEEBD0 !important; }
+.ring-blue-500, .focus\:ring-blue-500:focus { --tw-ring-color: #1DB954 !important; }
+.border-indigo-400 { border-color: #1DB954 !important; }
+.text-indigo-600 { color: #1DB954 !important; }
+input[type="checkbox"] { accent-color: #1DB954; }
+
+/* ===== DARK MODE ===== */
+
+/* Základní */
+.dark body { background-color: #0D1117; color: #E6EDF3; }
+
+/* Pozadí */
+.dark .bg-white { background-color: #161B22 !important; }
+.dark .bg-gray-50 { background-color: #21262D !important; }
+.dark .bg-gray-100 { background-color: #21262D !important; }
+.dark .bg-black { background-color: #000 !important; }
+
+/* Navigace */
+.dark nav { background-color: #1E2530 !important; border-color: #2D3748 !important; }
+.dark nav a, .dark nav button { color: #8B949E; }
+.dark nav a:hover, .dark nav button:hover { color: #E6EDF3 !important; background-color: #2E2E2E !important; }
+
+/* Okraje */
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-300 { border-color: #2D3748 !important; }
+
+/* Text */
+.dark .text-gray-900 { color: #E6EDF3 !important; }
+.dark .text-gray-800 { color: #E6EDF3 !important; }
+.dark .text-gray-700 { color: #C9D1D9 !important; }
+.dark .text-gray-600 { color: #8B949E !important; }
+.dark .text-gray-500,
+.dark .text-gray-400 { color: #6E7681 !important; }
+
+/* Inputy */
+.dark input, .dark select, .dark textarea {
+    background-color: #252D38 !important;
+    border-color: #2D3748 !important;
+    color: #E6EDF3 !important;
+}
+.dark input::placeholder { color: #6E7681 !important; }
+
+/* Hover */
+.dark .hover\:bg-gray-50:hover { background-color: #1A2233 !important; }
+.dark .hover\:bg-gray-100:hover { background-color: #2D3748 !important; }
+.dark .hover\:bg-gray-200:hover { background-color: #374151 !important; }
+
+/* Tlačítka šedá */
+.dark .bg-gray-100 { background-color: #252D38 !important; color: #C9D1D9 !important; }
+
+/* Shadows */
+.dark .shadow-xl { box-shadow: 0 20px 60px rgba(0,0,0,0.6) !important; }
+
+/* Divide */
+.dark .divide-gray-50 > * + * { border-color: #2D3748 !important; }
+
+/* Zelené akcenty dark */
+.dark .bg-green-600 { background-color: #1DB954 !important; }
+.dark .hover\:bg-green-700:hover { background-color: #17A145 !important; }
+.dark .bg-blue-600 { background-color: #1DB954 !important; }
+.dark .hover\:bg-blue-700:hover { background-color: #17A145 !important; }
+.dark .text-blue-600 { color: #1DB954 !important; }
+.dark .text-blue-700 { color: #1DB954 !important; }
+.dark .text-blue-400 { color: #1DB954 !important; }
+.dark .border-blue-500 { border-color: #1DB954 !important; }
+.dark .border-blue-400 { border-color: #1DB954 !important; }
+.dark .bg-blue-50 { background-color: #162420 !important; }
+.dark .bg-blue-100 { background-color: #162420 !important; }
+.dark .hover\:bg-blue-200:hover { background-color: #1a2e25 !important; }
+
+/* Progress bar */
+.dark .bg-blue-500 { background-color: #1DB954 !important; }
+
+/* AMS aktivní slot */
+.dark .border-blue-400 { border-color: #1DB954 !important; }
+
+/* Joystick */
+.dark .bg-gray-100.rounded-lg:not(input) { background-color: #252D38 !important; color: #C9D1D9 !important; }
+
+/* Offline */
+.dark .opacity-50 { opacity: 0.4 !important; }
+
+/* Yellow */
+.dark .bg-yellow-50 { background-color: #2a2000 !important; }
+.dark .border-yellow-300 { border-color: #854d0e !important; }
+.dark .text-yellow-800 { color: #fef08a !important; }
+.dark .text-yellow-600 { color: #fde047 !important; }
+
+/* Red */
+.dark .bg-red-50 { background-color: #2a0000 !important; }
+.dark .border-red-100 { border-color: #7f1d1d !important; }
+.dark .border-red-200 { border-color: #991b1b !important; }
+.dark .text-red-800 { color: #fca5a5 !important; }
+
+/* Purple – Vázový režim */
+.dark .bg-purple-50 { background-color: #21262D !important; }
+.dark .text-purple-700 { color: #E6EDF3 !important; }
+
+/* Orange – Podpory */
+.dark .bg-orange-50 { background-color: #21262D !important; }
+.dark .text-orange-700 { color: #E6EDF3 !important; }
+
+/* Modaly */
+.dark .bg-white.rounded-xl.shadow-xl {
+    background-color: #1E2530 !important;
+    border: 1px solid #2D3748;
+}
+
+/* Checkbox v dialogu */
+.dark .bg-gray-50.rounded-lg.px-3 { background-color: #252D38 !important; }
+
+/* Thumbnail výběr podložky */
+.dark .border-blue-500.shadow-md { border-color: #1DB954 !important; }
+
+/* Scrollbar */
+.dark ::-webkit-scrollbar { width: 8px; }
+.dark ::-webkit-scrollbar-track { background: #1E2530; }
+.dark ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #1DB954; }

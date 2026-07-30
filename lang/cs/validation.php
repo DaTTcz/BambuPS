@@ -1,0 +1,41 @@
+<?php
+
+return [
+    'accepted'   => 'Pole :attribute musí být přijato.',
+    'email'      => 'Pole :attribute musí být platná e-mailová adresa.',
+    'exists'     => 'Vybraná hodnota pole :attribute je neplatná.',
+    'max'        => [
+        'numeric' => 'Pole :attribute nesmí být větší než :max.',
+        'file'    => 'Soubor :attribute nesmí být větší než :max kilobajtů.',
+        'string'  => 'Pole :attribute nesmí mít více než :max znaků.',
+        'array'   => 'Pole :attribute nesmí mít více než :max položek.',
+    ],
+    'min'        => [
+        'numeric' => 'Pole :attribute musí být alespoň :min.',
+        'file'    => 'Soubor :attribute musí mít alespoň :min kilobajtů.',
+        'string'  => 'Pole :attribute musí mít alespoň :min znaků.',
+        'array'   => 'Pole :attribute musí mít alespoň :min položek.',
+    ],
+    'required'   => 'Pole :attribute je povinné.',
+    'required_if'=> 'Pole :attribute je povinné, pokud :other je :value.',
+    'same'       => 'Pole :attribute a :other se musí shodovat.',
+    'string'     => 'Pole :attribute musí být řetězec.',
+    'unique'     => 'Hodnota pole :attribute již byla použita.',
+    'url'        => 'Formát pole :attribute je neplatný.',
+    'confirmed'  => 'Potvrzení pole :attribute se neshoduje.',
+    'numeric'    => 'Pole :attribute musí být číslo.',
+    'integer'    => 'Pole :attribute musí být celé číslo.',
+    'ip'         => 'Pole :attribute musí být platná IP adresa.',
+    'regex'      => 'Formát pole :attribute je neplatný.',
+    'attributes' => [
+        'name'                  => 'jméno',
+        'email'                 => 'e-mail',
+        'password'              => 'heslo',
+        'password_confirmation' => 'potvrzení hesla',
+        'current_password'      => 'aktuální heslo',
+        'ip_address'            => 'IP adresa',
+        'serial_number'         => 'sériové číslo',
+        'access_code'           => 'přístupový kód',
+        'newTokenName'          => 'název tokenu',
+    ],
+];
