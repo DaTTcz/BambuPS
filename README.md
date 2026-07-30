@@ -76,8 +76,6 @@ Vyvíjeno a testováno primárně na **Bambu Lab X1 Carbon** a **X1E**. Měla by
 
 BambuPS mluví s tiskárnou přímo přes lokální MQTT (port 8883, TLS) a FTPS (port 990) — stejný protokol, jaký používá oficiální Bambu Studio v LAN režimu. Žádná data neopouští tvoji síť.
 
-Formát MQTT příkazů byl z velké části zpětně odvozen a ověřen porovnáním proti [OpenBambuAPI](https://github.com/Doridian/OpenBambuAPI) dokumentaci a [Bambuddy](https://github.com/maziggy/bambuddy) (děkujeme za inspiraci a otevřený zdrojový kód, který pomohl vyladit nejeden detail).
-
 ## ⚠️ Prohlášení
 
 Tohle je neoficiální, komunitní projekt. Není přidružený k Bambu Lab. Používáš na vlastní riziko — appka posílá příkazy přímo tiskárně, a i když je to navržené bezpečně, doporučujeme mít oči na tiskárně při prvních tiscích s novou appkou.
