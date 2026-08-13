@@ -32,7 +32,7 @@
             @endforeach
         </nav>
 
-	{{-- Toolbar --}}
+        {{-- Toolbar --}}
         <div class="space-y-2">
             {{-- Řádek 1: View toggle, hledání, akce --}}
             <div class="flex items-center justify-between gap-2">
@@ -113,10 +113,10 @@
             {{-- Card view --}}
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                 @foreach($this->files as $file)
-		    <div class="group relative bg-white dark:bg-bambu-dark-2 border border-gray-200 dark:border-bambu-dark-4 rounded-xl overflow-hidden hover:border-green-400 dark:hover:border-bambu-green hover:shadow-sm transition-all cursor-pointer"
+                    <div class="group relative bg-white dark:bg-bambu-dark-2 border border-gray-200 dark:border-bambu-dark-4 rounded-xl overflow-hidden hover:border-green-400 dark:hover:border-bambu-green hover:shadow-sm transition-all cursor-pointer"
                         onclick="window.location='{{ route('file.show', $file->id) }}'">
 
-			<div class="aspect-square relative">
+                        <div class="aspect-square relative">
                             @if($file->list_thumbnail_url)
                                 <img src="{{ $file->list_thumbnail_url }}" class="w-full h-full object-contain bg-gray-50 dark:bg-bambu-dark-3" alt="náhled">
                             @elseif(str_ends_with(strtolower($file->original_name), '.gcode'))
@@ -144,7 +144,7 @@
                             </div>
                         </div>
 
-			{{-- Akční ikonky --}}
+                        {{-- Akční ikonky --}}
                         <div class="border-t border-gray-100 dark:border-bambu-dark-4 px-2 py-1.5 flex items-center justify-between">
                             <a onclick="event.stopPropagation()" href="{{ route('file.download', $file->id) }}"
                                 title="Stáhnout" class="p-1 text-gray-400 hover:text-green-600 text-xs transition-colors">⬇️</a>
