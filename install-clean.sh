@@ -82,12 +82,22 @@ require_root() {
 
 require_root
 
+OS_ID=""
+OS_CODENAME=""
 if [[ -f /etc/os-release ]]; then
     . /etc/os-release
-    if [[ "${ID:-}" != "ubuntu" && "${ID_LIKE:-}" != *debian* ]]; then
-        warn "Tenhle skript je testovaný na Ubuntu/Debian. Detekovaný systém: ${PRETTY_NAME:-neznámý}."
-        [[ "$(ask 'Pokračovat i tak? (ano/ne)' 'ne')" == "ano" ]] || die "Instalace zrušena."
-    fi
+    OS_ID="${ID:-}"
+    # VERSION_CODENAME chybí na Debian testing/sid - dopočítáme podle verze.
+    OS_CODENAME="${VERSION_CODENAME:-}"
+    case "$OS_ID" in
+        ubuntu|debian)
+            : # podporováno, viz níže
+            ;;
+        *)
+            warn "Tenhle skript je testovaný na Ubuntu a Debian. Detekovaný systém: ${PRETTY_NAME:-neznámý}."
+            [[ "$(ask 'Pokračovat i tak? (ano/ne)' 'ne')" == "ano" ]] || die "Instalace zrušena."
+            ;;
+    esac
 else
     warn "Nepodařilo se detekovat verzi systému, pokračuji na vlastní riziko."
 fi
@@ -126,13 +136,40 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -y -qq
 
 log "Instaluji základní nástroje..."
-apt-get install -y -qq software-properties-common ca-certificates curl gnupg lsb-release unzip git openssl apt-transport-https
+# 'sudo' na holém Debianu (např. z netinst ISO) často není přednainstalované -
+# appka ho ale sama potřebuje za běhu (www-data si přes něj ovládá supervisorctl,
+# viz krok 8 níže), tak ho instalujeme vždycky výslovně, i když už běžíme jako root.
+apt-get install -y -qq software-properties-common ca-certificates curl gnupg lsb-release unzip git openssl apt-transport-https sudo
 
-log "Přidávám repozitář PHP ${PHP_VERSION} (ondrej/php PPA)..."
-if ! apt-cache policy | grep -q "ondrej/php"; then
-    LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php >/dev/null
-    apt-get update -y -qq
+if [[ -z "$OS_CODENAME" ]]; then
+    OS_CODENAME="$(lsb_release -sc 2>/dev/null || true)"
 fi
+
+log "Přidávám repozitář pro PHP ${PHP_VERSION}..."
+case "$OS_ID" in
+    ubuntu)
+        # ondrej/php PPA - funguje jen na Ubuntu (Launchpad), ne na Debianu.
+        if ! grep -rq "ondrej/php" /etc/apt/sources.list.d/ 2>/dev/null; then
+            LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php >/dev/null
+            apt-get update -y -qq
+        fi
+        ;;
+    debian)
+        # Na Debianu ppa: nefunguje - použijeme oficiální balíčky Ondřeje Surého
+        # přímo pro Debian (packages.sury.org), stejný zdroj balíčků, jiná cesta.
+        [[ -n "$OS_CODENAME" ]] || die "Nepodařilo se zjistit kódové jméno Debianu (VERSION_CODENAME), nemůžu přidat repozitář s PHP."
+        if [[ ! -f /etc/apt/sources.list.d/php.list ]]; then
+            install -d -m 0755 /usr/share/keyrings
+            curl -fsSL -o /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg
+            echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ ${OS_CODENAME} main" \
+                > /etc/apt/sources.list.d/php.list
+            apt-get update -y -qq
+        fi
+        ;;
+    *)
+        die "Nepodporovaná distribuce pro automatickou instalaci PHP ${PHP_VERSION}: ${OS_ID:-neznámá}. Nainstaluj PHP ${PHP_VERSION} ručně a spusť skript znovu."
+        ;;
+esac
 
 log "Instaluji PHP ${PHP_VERSION} a potřebná rozšíření..."
 apt-get install -y -qq \
