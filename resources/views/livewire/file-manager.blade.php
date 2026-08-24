@@ -287,17 +287,38 @@
 
     {{-- Modal: Upload --}}
     @if($showUploadModal)
-        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            x-data="{ uploading: false, progress: 0 }"
+            x-on:livewire-upload-start="uploading = true; progress = 0"
+            x-on:livewire-upload-finish="uploading = false"
+            x-on:livewire-upload-cancel="uploading = false"
+            x-on:livewire-upload-error="uploading = false"
+            x-on:livewire-upload-progress="progress = $event.detail.progress">
             <div class="bg-white dark:bg-bambu-dark-2 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-100 dark:border-bambu-dark-4">
                 <h3 class="text-lg font-semibold text-gray-800 dark:text-bambu-text mb-4">⬆ Nahrát soubory</h3>
                 <input wire:model="uploadedFiles" type="file" multiple accept=".3mf,.gcode"
                     class="w-full text-sm text-gray-500 dark:text-bambu-text-dim mb-4">
-                <div wire:loading wire:target="uploadedFiles" class="text-sm text-green-600 mb-2">Nahrávám...</div>
+
+                {{-- Progress bar - fáze 1: přenos souboru do prohlížeče/na server --}}
+                <div x-show="uploading" x-cloak class="mb-4">
+                    <div class="w-full bg-gray-200 dark:bg-bambu-dark-3 rounded-full h-2 overflow-hidden">
+                        <div class="bg-green-600 h-2 rounded-full transition-all duration-150" :style="`width: ${progress}%`"></div>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-bambu-text-dim mt-1" x-text="`Nahrávám... ${progress}%`"></p>
+                </div>
+
+                {{-- Fáze 2: appka na serveru soubor zpracovává (parsování, náhledy) --}}
+                <div wire:loading wire:target="uploadFiles" class="text-sm text-green-600 mb-2">
+                    ⏳ Zpracovávám soubor na serveru (parsování, náhledy)...
+                </div>
+
                 <div class="flex justify-end space-x-3">
                     <button wire:click="$set('showUploadModal', false)"
                         class="px-4 py-2 text-sm text-gray-600 dark:text-bambu-text-dim hover:text-gray-800">Zrušit</button>
                     <button wire:click="uploadFiles"
-                        class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium">
+                        wire:loading.attr="disabled"
+                        wire:target="uploadFiles"
+                        class="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
                         <span wire:loading.remove wire:target="uploadFiles">Nahrát</span>
                         <span wire:loading wire:target="uploadFiles">Zpracovávám...</span>
                     </button>

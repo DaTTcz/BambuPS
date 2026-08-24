@@ -96,6 +96,8 @@ Tohle je neoficiální, komunitní projekt. Není přidružený k Bambu Lab. Pou
 ## 🙏 Poděkování
 
 - [Bambu Lab](https://bambulab.com) za skvělé tiskárny
+- Komunitě kolem [OpenBambuAPI](https://github.com/Doridian/OpenBambuAPI) a [Bambuddy](https://github.com/maziggy/bambuddy) za zpětně odvozenou dokumentaci protokolu
+- Vytvořeno s pomocí Claude (Anthropic)
 
 ---
 
