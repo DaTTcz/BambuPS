@@ -11,10 +11,16 @@
 
     {{-- Modal: Live progress checklist aktualizace --}}
     @if($showUpdateModal)
+        @php
+            $totalSteps = count($updateSteps);
+            $doneCount  = collect($updateStatus)->filter(fn ($status) => $status === 'done')->count();
+            $progressPct = $totalSteps > 0 ? (int) round($doneCount / $totalSteps * 100) : 0;
+        @endphp
         <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
             x-data="{
                 steps: @js(array_keys($updateSteps)),
                 current: 0,
+                finishing: false,
                 async run() {
                     for (let i = 0; i < this.steps.length; i++) {
                         this.current = i;
@@ -22,14 +28,27 @@
                         if (@this.updateFailed) return;
                     }
                     this.current = this.steps.length;
+                    this.finishing = true;
                     await $wire.finishUpdate();
+                    this.finishing = false;
                 }
             }"
             x-init="run()">
             <div class="bg-white dark:bg-bambu-dark-2 border border-gray-100 dark:border-bambu-dark-4 rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-                <h3 class="text-lg font-semibold text-gray-800 dark:text-bambu-text mb-5">
-                    Aktualizuji na {{ $targetVersion }}...
-                </h3>
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-lg font-semibold text-gray-800 dark:text-bambu-text">
+                        Aktualizuji na {{ $targetVersion }}...
+                    </h3>
+                    <span class="text-xs text-gray-400 dark:text-bambu-text-dim font-mono" x-show="!finishing">
+                        {{ $doneCount }}/{{ $totalSteps }}
+                    </span>
+                </div>
+
+                {{-- Celkový průběh - ať je vidět, kolik je hotovo, i když je aktuální krok rychlý a blbne oko --}}
+                <div class="w-full bg-gray-100 dark:bg-bambu-dark-3 rounded-full h-1.5 mb-5 overflow-hidden">
+                    <div class="bg-green-600 h-1.5 rounded-full transition-all duration-500 ease-out"
+                        style="width: {{ $progressPct }}%"></div>
+                </div>
 
                 <ul class="space-y-3">
                     @foreach($updateSteps as $key => $label)
@@ -51,6 +70,14 @@
                             </span>
                         </li>
                     @endforeach
+
+                    {{-- Poslední, "neviditelný" krok - appka po posledním checklistovém bodu ještě
+                         chvíli dobíhá na pozadí (promazání cache verze, zavření okna). Bez tohohle
+                         řádku to vypadalo, že se po posledním ✅ appka na chvíli zasekla. --}}
+                    <li x-show="finishing" x-cloak class="flex items-center space-x-3 text-sm">
+                        <span class="shrink-0 inline-block w-4 h-4 border-2 border-gray-300 dark:border-bambu-dark-4 border-t-green-600 dark:border-t-bambu-green rounded-full animate-spin"></span>
+                        <span class="text-gray-500 dark:text-bambu-text-dim">Dokončuji...</span>
+                    </li>
                 </ul>
 
                 @if($updateFailed)
