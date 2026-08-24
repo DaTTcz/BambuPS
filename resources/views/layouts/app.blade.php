@@ -83,7 +83,7 @@
         </script>
 	<!-- Footer -->
         <footer class="mt-auto py-4 text-center text-xs text-gray-400 dark:text-bambu-text-dim border-t border-gray-100 dark:border-bambu-dark-4">
-            <span>BambuPS v1.0 &nbsp;·&nbsp; Autor: <a href="#" class="hover:text-green-600 transition-colors">David Trubka</a> &nbsp;·&nbsp; © 2026</span>
+            <span>BambuPS {{ (new \App\Services\UpdateService())->getCurrentVersion() }} &nbsp;·&nbsp; Autor: <a href="https://github.com/DaTTcz" target="_blank" rel="noopener" class="hover:text-green-600 transition-colors">David Trubka</a> &nbsp;·&nbsp; © {{ now()->year > 2026 ? '2026 - ' . now()->year : '2026' }}</span>
         </footer>
     </body>
 </html>
