@@ -89,6 +89,25 @@ class VersionBadge extends Component
         $this->showUpdateModal = false;
     }
 
+    /**
+     * Ruční kontrola aktualizací - obchází hodinovou cache dostupnou přes
+     * getLatestVersion(). Použije se tlačítkem vedle čísla verze, ať uživatel
+     * nemusí čekat, až cache sama vyprší.
+     */
+    public function checkForUpdates(): void
+    {
+        $service = new UpdateService();
+        $service->clearVersionCache();
+
+        if ($service->isUpdateAvailable()) {
+            // Nic dalšího není potřeba - tlačítko "aktualizuj" se objeví samo
+            // přes computed property getUpdateAvailableProperty().
+            return;
+        }
+
+        $this->dispatch('toast', type: 'success', message: 'Appka je aktuální (' . $service->getCurrentVersion() . ').');
+    }
+
     public function render()
     {
         return view('livewire.version-badge');

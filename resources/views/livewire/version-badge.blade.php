@@ -6,7 +6,18 @@
             <span>⬆️ aktualizuj na {{ $this->latestVersion }}</span>
         </button>
     @else
-        <span class="px-2 py-1 text-xs text-gray-400 dark:text-bambu-text-dim font-mono">{{ $this->currentVersion }}</span>
+        <span class="flex items-center gap-1">
+            <span class="px-2 py-1 text-xs text-gray-400 dark:text-bambu-text-dim font-mono">{{ $this->currentVersion }}</span>
+            <button wire:click="checkForUpdates"
+                wire:loading.attr="disabled"
+                wire:target="checkForUpdates"
+                title="Zkontrolovat aktualizace teď"
+                class="p-1 rounded text-gray-400 dark:text-bambu-text-dim hover:text-gray-600 dark:hover:text-bambu-text hover:bg-gray-100 dark:hover:bg-bambu-dark-3 transition-colors disabled:opacity-50">
+                <span wire:loading.remove wire:target="checkForUpdates">🔄</span>
+                <span wire:loading wire:target="checkForUpdates"
+                    class="inline-block w-3 h-3 border-2 border-gray-300 dark:border-bambu-dark-4 border-t-green-600 dark:border-t-bambu-green rounded-full animate-spin align-middle"></span>
+            </button>
+        </span>
     @endif
 
     {{-- Modal: Live progress checklist aktualizace --}}
