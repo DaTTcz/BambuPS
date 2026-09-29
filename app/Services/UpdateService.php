@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 
 class UpdateService
 {
@@ -87,20 +88,57 @@ class UpdateService
      * Provede jeden krok aktualizace. Volá se postupně z frontendu (stejný
      * vzor jako CameraProvisionService::runProvisionStep), aby uživatel
      * viděl živý průběh aktualizace.
+     *
+     * Vrací ['ok' => bool, 'output' => string]. Úspěch se pozná podle
+     * návratového kódu příkazu, ne podle textu výstupu (composer/npm
+     * chyby často neobsahují žádné jednoznačné klíčové slovo).
      */
-    public function runUpdateStep(string $step, string $targetVersion): string
+    public function runUpdateStep(string $step, string $targetVersion): array
     {
         $path = config('bambups.app_path');
-        $cd   = "cd " . escapeshellarg($path);
 
-        return match ($step) {
-            'fetch'    => (string) shell_exec("{$cd} && git fetch --tags 2>&1"),
-            'checkout' => (string) shell_exec("{$cd} && git checkout " . escapeshellarg($targetVersion) . " 2>&1"),
-            'composer' => (string) shell_exec("{$cd} && composer install --no-dev --optimize-autoloader --no-interaction 2>&1"),
-            'npm'      => (string) shell_exec("{$cd} && npm install 2>&1 && npm run build 2>&1"),
-            'migrate'  => (string) shell_exec("{$cd} && php artisan migrate --force 2>&1"),
-            'cache'    => (string) shell_exec("{$cd} && php artisan config:clear 2>&1 && php artisan cache:clear 2>&1 && php artisan view:clear 2>&1"),
-            default    => '',
+        $command = match ($step) {
+            'fetch'    => 'git fetch --tags 2>&1',
+            // -f: adresář appky spravuje updater - lokální změny trackovaných
+            // souborů (typicky package-lock.json přepsaný npm) nesmí update zablokovat.
+            'checkout' => 'git checkout -f ' . escapeshellarg($targetVersion) . ' 2>&1',
+            'composer' => 'composer install --no-dev --optimize-autoloader --no-interaction 2>&1',
+            // npm ci instaluje přesně podle package-lock.json a nepřepisuje ho.
+            'npm'      => 'npm ci --no-audit --no-fund 2>&1 && npm run build 2>&1',
+            'migrate'  => 'php artisan migrate --force 2>&1',
+            'cache'    => 'php artisan config:clear 2>&1 && php artisan cache:clear 2>&1 && php artisan view:clear 2>&1',
+            default    => null,
         };
+
+        if ($command === null) {
+            return ['ok' => false, 'output' => "Neznámý krok aktualizace: {$step}"];
+        }
+
+        // PHP-FPM spouští příkazy s vyčištěným prostředím (clear_env) - bez HOME
+        // composer vůbec nenaběhne a npm neví, kam dát cache. Dáme jim vlastní
+        // zapisovatelný domov uvnitř storage/ (patří www-data, jako celá appka).
+        $home = $path . '/storage/app/.update-home';
+        if (!is_dir($home)) {
+            @mkdir($home, 0775, true);
+        }
+
+        try {
+            $result = Process::path($path)
+                ->env([
+                    'HOME'             => $home,
+                    'COMPOSER_HOME'    => $home . '/.composer',
+                    'npm_config_cache' => $home . '/.npm',
+                    'PATH'             => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+                ])
+                ->timeout(600)
+                ->run($command);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'output' => $e->getMessage()];
+        }
+
+        return [
+            'ok'     => $result->successful(),
+            'output' => trim($result->output() . "\n" . $result->errorOutput()),
+        ];
     }
 }

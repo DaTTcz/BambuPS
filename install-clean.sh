@@ -103,7 +103,43 @@ else
 fi
 
 if [[ -d "$APP_DIR" ]]; then
-    die "Složka ${APP_DIR} už existuje – vypadá to, že appka je už nainstalovaná. Tenhle skript je jen pro ČISTOU instalaci na nový server. Pro aktualizaci použij tlačítko 'aktualizovat' v appce."
+    # Tři situace:
+    # 1) Instalátor tu kdysi doběhl až do konce (značka .install-complete)
+    #    -> skutečná instalace, tam sahat nebudeme vůbec.
+    # 2) Značka chybí, ale v databázi appky jsou uživatelé -> nejspíš starší
+    #    instalace sestavená bez značky (nebo klon VM se starými daty).
+    #    Může jít o ostrá data, tak se zeptáme s výchozí odpovědí "ne".
+    # 3) Nic z toho -> zbytek po neúspěšném běhu instalátoru, nabídneme smazat
+    #    s výchozí odpovědí "ano", ať se to nemusí řešit ručně.
+    # (Samotný APP_KEY v .env nic neříká - generuje se ještě před migrací
+    # databáze, takže ho má i instalace, která spadla v půlce.)
+    if [[ -f "${INSTALL_ROOT}/.install-complete" ]]; then
+        die "Na tomhle serveru už je BambuPS nainstalovaný (${APP_DIR}). Tenhle skript je jen pro ČISTOU instalaci na nový server. Pro aktualizaci použij tlačítko 'aktualizovat' v appce."
+    fi
+    APP_USERS="$(mysql -u root -N -B -e "SELECT COUNT(*) FROM \`bambups\`.users" 2>/dev/null || echo 0)"
+    if [[ "${APP_USERS:-0}" -gt 0 ]]; then
+        warn "Složka ${APP_DIR} už existuje a v databázi appky jsou uživatelské účty (${APP_USERS}) - vypadá to na existující instalaci (nebo klon VM se starými daty)."
+        CLEAN_ANSWER="$(ask 'Opravdu ji smazat a nainstalovat BambuPS načisto? (ano/ne)' 'ne')"
+    else
+        warn "Složka ${APP_DIR} už existuje, ale instalace v ní nebyla dokončena - je to nejspíš zbytek po předchozím (neúspěšném) běhu instalátoru nebo naklonovaném VM."
+        CLEAN_ANSWER="$(ask 'Smazat tuhle složku a pokračovat v čisté instalaci? (ano/ne)' 'ano')"
+    fi
+    if [[ "$CLEAN_ANSWER" == "ano" ]]; then
+        # Na naklonovaném VM můžou ze starého image zůstat supervisor programy
+        # BambuPS (MQTT, go2rtc, kamery), které by po startu supervisoru znovu
+        # zapisovaly do ${APP_DIR}. Jejich configy smažeme a supervisor je po
+        # reread/update sám zastaví - instalátor si potřebné vytvoří znovu níž,
+        # kamery pak appka sama. (Databázi řeší samostatný dotaz níž.)
+        rm -f /etc/supervisor/conf.d/bambups-*.conf
+        if command -v supervisorctl >/dev/null 2>&1; then
+            supervisorctl reread >/dev/null 2>&1 || true
+            supervisorctl update >/dev/null 2>&1 || true
+        fi
+        rm -rf "$APP_DIR"
+        ok "Složka ${APP_DIR} smazána (včetně starých služeb BambuPS)."
+    else
+        die "Instalace zrušena."
+    fi
 fi
 
 echo
@@ -145,13 +181,33 @@ if [[ -z "$OS_CODENAME" ]]; then
     OS_CODENAME="$(lsb_release -sc 2>/dev/null || true)"
 fi
 
-log "Přidávám repozitář pro PHP ${PHP_VERSION}..."
+log "Připravuji zdroj balíčků pro PHP ${PHP_VERSION}..."
 case "$OS_ID" in
     ubuntu)
-        # ondrej/php PPA - funguje jen na Ubuntu (Launchpad), ne na Debianu.
-        if ! grep -rq "ondrej/php" /etc/apt/sources.list.d/ 2>/dev/null; then
+        # Úklid po starší verzi instalátoru: ta při chybějícím PPA pro novou
+        # verzi Ubuntu přepínala ondrej/php na jinou řadu (např. noble). Takové
+        # balíčky ale na novějším Ubuntu nejdou nainstalovat (jiné názvy
+        # systémových knihoven), tak zdroj, který neodpovídá tomuhle systému, smažeme.
+        for f in $(grep -rl "ppa.launchpadcontent.net/ondrej/php" /etc/apt/sources.list.d/ 2>/dev/null || true); do
+            if ! grep -qw "${OS_CODENAME}" "$f"; then
+                warn "Odstraňuji nekompatibilní zdroj PHP balíčků: $f"
+                rm -f "$f"
+                apt-get update -y -qq
+            fi
+        done
+
+        if apt-cache show "php${PHP_VERSION}-fpm" >/dev/null 2>&1; then
+            # Novější Ubuntu (např. 26.04) má PHP ${PHP_VERSION} přímo v oficiálních
+            # repozitářích - PPA pak vůbec nepotřebujeme.
+            ok "PHP ${PHP_VERSION} je k dispozici v oficiálních repozitářích systému, PPA není potřeba."
+        elif ! grep -rq "ondrej/php" /etc/apt/sources.list.d/ 2>/dev/null; then
+            # Starší Ubuntu (např. 24.04) - PHP ${PHP_VERSION} dodá ondrej/php PPA.
             LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php >/dev/null
-            apt-get update -y -qq
+            if ! apt-get update -y -qq 2>/tmp/bambups-apt-update.log; then
+                cat /tmp/bambups-apt-update.log >&2
+                grep -rl "ppa.launchpadcontent.net/ondrej/php" /etc/apt/sources.list.d/ 2>/dev/null | xargs -r rm -f
+                die "PPA ondrej/php pro Ubuntu '${OS_CODENAME}' není dostupné a PHP ${PHP_VERSION} není ani v oficiálních repozitářích. Nainstaluj PHP ${PHP_VERSION} ručně a spusť skript znovu."
+            fi
         fi
         ;;
     debian)
@@ -172,12 +228,18 @@ case "$OS_ID" in
 esac
 
 log "Instaluji PHP ${PHP_VERSION} a potřebná rozšíření..."
-apt-get install -y -qq \
-    "php${PHP_VERSION}" "php${PHP_VERSION}-fpm" "php${PHP_VERSION}-cli" \
-    "php${PHP_VERSION}-mysql" "php${PHP_VERSION}-mbstring" "php${PHP_VERSION}-xml" \
-    "php${PHP_VERSION}-curl" "php${PHP_VERSION}-bcmath" "php${PHP_VERSION}-gd" \
-    "php${PHP_VERSION}-zip" "php${PHP_VERSION}-intl" "php${PHP_VERSION}-opcache" \
-    "php${PHP_VERSION}-common"
+PHP_PACKAGES=(
+    "php${PHP_VERSION}" "php${PHP_VERSION}-fpm" "php${PHP_VERSION}-cli"
+    "php${PHP_VERSION}-mysql" "php${PHP_VERSION}-mbstring" "php${PHP_VERSION}-xml"
+    "php${PHP_VERSION}-curl" "php${PHP_VERSION}-bcmath" "php${PHP_VERSION}-gd"
+    "php${PHP_VERSION}-zip" "php${PHP_VERSION}-intl" "php${PHP_VERSION}-common"
+)
+# Od PHP 8.5 je OPcache zabudovaný přímo v jádru - samostatný balíček
+# php8.5-opcache už neexistuje (u starších verzí ho pořád potřebujeme).
+if dpkg --compare-versions "${PHP_VERSION}" lt "8.5"; then
+    PHP_PACKAGES+=("php${PHP_VERSION}-opcache")
+fi
+apt-get install -y -qq "${PHP_PACKAGES[@]}"
 PHP_FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
 
 log "Instaluji nginx..."
@@ -219,10 +281,28 @@ DB_NAME="bambups"
 DB_USER="bambups"
 DB_PASS="$(random_secret 32)"
 
+# Na naklonovaném VM (nebo po dřívější instalaci) už databáze appky může
+# existovat i s daty. Pro čistou instalaci ji nabídneme smazat - výchozí
+# odpověď je ale "ne", ať o data nikdo nepřijde omylem.
+EXISTING_TABLES="$(mysql -u root -N -B -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}'" 2>/dev/null || echo 0)"
+if [[ "${EXISTING_TABLES:-0}" -gt 0 ]]; then
+    warn "Databáze '${DB_NAME}' už existuje a obsahuje ${EXISTING_TABLES} tabulek (data ze starší instalace)."
+    if [[ "$(ask 'Smazat ji a začít s prázdnou databází? (ano/ne)' 'ne')" == "ano" ]]; then
+        mysql -u root -e "DROP DATABASE \`${DB_NAME}\`;"
+        ok "Stará databáze '${DB_NAME}' smazána."
+    else
+        warn "Ponechávám stávající databázi - migrace ji jen doplní, stávající účty a data zůstanou."
+    fi
+fi
+
 mysql -u root <<SQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
+-- Uživatel už mohl existovat se starým heslem (klon VM, dřívější instalace) -
+-- CREATE USER IF NOT EXISTS heslo nezmění, tak ho nastavíme explicitně.
+ALTER USER '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
+ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
 DELETE FROM mysql.user WHERE User='';
@@ -244,6 +324,12 @@ fi
 log "Instaluji verzi: ${LATEST_TAG}"
 
 mkdir -p "$INSTALL_ROOT"
+# Pojistka: kdyby mezitím složku něco znovu vytvořilo (zbytek starých služeb),
+# git clone by selhal. Na začátku jsme už ověřili, že tu není hotová instalace.
+if [[ -d "$APP_DIR" ]]; then
+    warn "Složka ${APP_DIR} se mezitím znovu objevila (nejspíš ji vytvořil nějaký starý proces) - mažu ji před klonováním."
+    rm -rf "$APP_DIR"
+fi
 git clone --branch "$LATEST_TAG" --depth 1 "$REPO_URL" "$APP_DIR"
 cd "$APP_DIR"
 
@@ -337,7 +423,7 @@ log "Instaluji PHP závislosti (composer install)..."
 composer install --no-dev --optimize-autoloader --no-interaction
 
 log "Instaluji JS závislosti a builduji frontend (může chvíli trvat)..."
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 npm run build
 
 log "Generuji APP_KEY, migruji databázi..."
@@ -554,14 +640,19 @@ echo
 echo -e "${c_bold}${c_green}=== Systém je připraven, appka nastavena ===${c_reset}"
 echo -e "Appka poběží na: ${c_bold}https://${SERVER_ADDRESS}:${HTTPS_PORT}${c_reset}"
 echo -e "Instalační údaje (vč. hesla do DB) jsou uložené v: ${INFO_FILE}"
-echo
-echo "Teď vytvoříme první administrátorský účet appky – tím se přihlásíš do webu."
-echo
-
-sudo -u www-data php "${APP_DIR}/artisan" bambups:create-admin
-
-echo
-ok "Hotovo! Appka je nainstalovaná a admin účet vytvořený."
+EXISTING_USERS="$(mysql -u root -N -B -e "SELECT COUNT(*) FROM \`${DB_NAME}\`.users" 2>/dev/null || echo 0)"
+if [[ "${EXISTING_USERS:-0}" -gt 0 ]]; then
+    echo
+    ok "Hotovo! Appka je nainstalovaná. V databázi už jsou uživatelské účty (${EXISTING_USERS}) - přihlas se některým z nich."
+else
+    echo
+    echo "Teď vytvoříme první administrátorský účet appky – tím se přihlásíš do webu."
+    echo
+    sudo -u www-data php "${APP_DIR}/artisan" bambups:create-admin
+    echo
+    ok "Hotovo! Appka je nainstalovaná a admin účet vytvořený."
+fi
+date -Iseconds > "${INSTALL_ROOT}/.install-complete"
 echo -e "Otevři ${c_bold}https://${SERVER_ADDRESS}:${HTTPS_PORT}${c_reset} a přihlas se."
 echo "Prohlížeč u self-signed certifikátu ukáže bezpečnostní varování – to je v pořádku, potvrď výjimku a pokračuj."
 echo "Přidání tiskáren, zapnutí kamery/MQTT/notifikací už proběhne přímo přes appku."

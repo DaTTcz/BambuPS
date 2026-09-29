@@ -34,7 +34,7 @@ Postavená na Laravel 13 + Livewire + Alpine.js/Tailwind CSS. Ovládá tiskárny
 
 ## 📋 Požadavky
 
-- Ubuntu Server 22.04+ nebo Debian 12/13 (čistý, i rovnou z netinst ISO)
+- **Ubuntu Server 26.04 LTS** (čistá instalace) – na tomhle systému je instalátor otestovaný. Na jiných verzích Ubuntu nebo na Debianu může fungovat, ale zatím to ověřené není.
 - Tiskárna Bambu Lab s aktivním **LAN Only Mode** a **Developer Mode** (Nastavení → síť na displeji tiskárny)
 - Root/sudo přístup na serveru
 - Server ve stejné síti jako tiskárna(y)
@@ -48,7 +48,7 @@ curl -O https://raw.githubusercontent.com/DaTTcz/BambuPS/main/install-clean.sh
 sudo bash install-clean.sh
 ```
 
-Pokud jsi přihlášený rovnou jako `root` (běžné na čerstvém Debianu z netinst ISO), stačí `bash install-clean.sh` bez `sudo`. A pokud na tom čerstvém systému ještě není `curl`, stáhni skript přes `wget -O install-clean.sh https://raw.githubusercontent.com/DaTTcz/BambuPS/main/install-clean.sh` – curl si pak nainstaluje appka sama jako součást závislostí.
+Pokud jsi přihlášený rovnou jako `root`, stačí `bash install-clean.sh` bez `sudo`. A pokud na tom čerstvém systému ještě není `curl`, stáhni skript přes `wget -O install-clean.sh https://raw.githubusercontent.com/DaTTcz/BambuPS/main/install-clean.sh` – curl si pak nainstaluje appka sama jako součást závislostí.
 
 Skript se zeptá na pár základních věcí (IP/doména serveru, porty) a zařídí kompletně vše:
 - Nainstaluje závislosti (PHP 8.5, nginx, MariaDB, Node.js, Supervisor, ffmpeg, go2rtc)

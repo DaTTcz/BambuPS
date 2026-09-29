@@ -62,12 +62,12 @@ class VersionBadge extends Component
             return;
         }
 
-        $output = (new UpdateService())->runUpdateStep($step, $this->targetVersion);
+        $result = (new UpdateService())->runUpdateStep($step, $this->targetVersion);
 
-        // Jednoduchá detekce selhání - fatal chyby PHP/composeru/gitu obsahují tato klíčová slova
-        if (preg_match('/fatal:|error:|Fatal error|Your requirements could not be resolved/i', $output)) {
+        // Selhání poznáme podle návratového kódu příkazu (viz UpdateService).
+        if (!$result['ok']) {
             $this->updateFailed = true;
-            $this->updateError  = $output;
+            $this->updateError  = $result['output'] !== '' ? $result['output'] : 'Krok skončil chybou bez dalšího výpisu.';
             return;
         }
 
