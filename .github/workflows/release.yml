@@ -1,0 +1,32 @@
+# Automatické vydání: jakmile se na GitHub pushne tag ve tvaru vX.Y.Z,
+# vytvoří se k němu GitHub Release s popisem změn vygenerovaným z commitů.
+# Appka (VersionBadge / UpdateService) hledá právě nejnovější Release,
+# samotný tag bez Release by jako aktualizaci neviděla.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vytvořit GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME už existuje, nic nedělám."
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag \
+            --latest
