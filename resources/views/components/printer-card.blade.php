@@ -92,23 +92,47 @@
                 @endif
             </div>
 
-            {{-- AMS barvy --}}
-            @if(!empty($printer->status['ams']['ams']))
-                <div class="flex items-center space-x-1 mb-2">
-                    @foreach($printer->status['ams']['ams'] as $ams)
-                        @foreach($ams['tray'] as $tray)
-                            @php
-                                $trayColor = $tray['tray_color'] ?? '00000000';
-                                $isEmpty   = $trayColor === '00000000';
-                                $colorHex  = '#' . substr($trayColor, 0, 6);
-                                $isActive  = isset($printer->status['ams']['tray_now']) &&
-                                    (string)$printer->status['ams']['tray_now'] === (string)($ams['id'] * 4 + $tray['id']);
-                            @endphp
-                            <div class="w-4 h-4 rounded-full border-2 transition-all
-                                {{ $isActive ? 'border-green-400 scale-110' : 'border-gray-200 dark:border-bambu-dark-4' }}"
-                                style="background-color: {{ $isEmpty ? '#e5e7eb' : $colorHex }}"></div>
-                        @endforeach
-                    @endforeach
+            {{-- AMS barvy + světlo komory (vpravo) --}}
+            @php
+                $hasAms       = !empty($printer->status['ams']['ams']);
+                $chamberLight = collect($printer->status['lights'] ?? [])->firstWhere('node', 'chamber_light');
+                $lightOn      = in_array($chamberLight['mode'] ?? 'off', ['on', 'flashing'], true);
+            @endphp
+            @if($hasAms || ($showControls && $chamberLight))
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center space-x-1">
+                        @if($hasAms)
+                            @foreach($printer->status['ams']['ams'] as $ams)
+                                @foreach($ams['tray'] as $tray)
+                                    @php
+                                        $trayColor = $tray['tray_color'] ?? '00000000';
+                                        $isEmpty   = $trayColor === '00000000';
+                                        $colorHex  = '#' . substr($trayColor, 0, 6);
+                                        $isActive  = isset($printer->status['ams']['tray_now']) &&
+                                            (string)$printer->status['ams']['tray_now'] === (string)($ams['id'] * 4 + $tray['id']);
+                                    @endphp
+                                    <div class="w-4 h-4 rounded-full border-2 transition-all
+                                        {{ $isActive ? 'border-green-400 scale-110' : 'border-gray-200 dark:border-bambu-dark-4' }}"
+                                        style="background-color: {{ $isEmpty ? '#e5e7eb' : $colorHex }}"></div>
+                                @endforeach
+                            @endforeach
+                        @endif
+                    </div>
+
+                    @if($showControls && $chamberLight)
+                        <button wire:click="toggleChamberLight({{ $printer->id }})"
+                            wire:loading.attr="disabled"
+                            wire:target="toggleChamberLight({{ $printer->id }})"
+                            title="{{ $lightOn ? 'Vypnout světlo' : 'Zapnout světlo' }}"
+                            class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-sm transition-colors disabled:opacity-50
+                                {{ $lightOn
+                                    ? 'bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50'
+                                    : 'bg-gray-100 hover:bg-gray-200 dark:bg-bambu-dark-3 dark:hover:bg-bambu-dark-4 grayscale opacity-60' }}">
+                            <span wire:loading.remove wire:target="toggleChamberLight({{ $printer->id }})">💡</span>
+                            <span wire:loading wire:target="toggleChamberLight({{ $printer->id }})"
+                                class="inline-block w-3 h-3 border-2 border-gray-300 dark:border-bambu-dark-4 border-t-green-600 dark:border-t-bambu-green rounded-full animate-spin"></span>
+                        </button>
+                    @endif
                 </div>
             @endif
 

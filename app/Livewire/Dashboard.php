@@ -4,11 +4,14 @@ namespace App\Livewire;
 
 use App\Models\File;
 use App\Models\Printer;
+use App\Livewire\Concerns\ControlsPrinterLight;
 use App\Services\PrinterCommandService;
 use Livewire\Component;
 
 class Dashboard extends Component
 {
+    use ControlsPrinterLight;
+
     public function getPrintersProperty()
     {
         return Printer::where('enabled', true)->orderBy('name')->get();

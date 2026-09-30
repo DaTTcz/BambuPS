@@ -3,11 +3,14 @@
 namespace App\Livewire;
 
 use App\Models\Printer;
+use App\Livewire\Concerns\ControlsPrinterLight;
 use App\Services\PrinterCommandService;
 use Livewire\Component;
 
 class PrintersOverview extends Component
 {
+    use ControlsPrinterLight;
+
     public function pausePrint(int $printerId): void
     {
         $printer = Printer::findOrFail($printerId);

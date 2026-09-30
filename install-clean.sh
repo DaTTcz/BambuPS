@@ -509,6 +509,27 @@ startsecs=3
 startretries=5
 CONF
 
+# Po restartu serveru by mqtt/go2rtc (autostart=false) zůstaly zastavené, i když
+# jsou moduly v appce aktivní. Tenhle jednorázový program po startu supervisoru
+# spustí jen ty démony, jejichž modul je v DB zapnutý (artisan modules:start).
+# MariaDB při bootu nemusí být hned připravená - příkaz pak skončí chybou
+# a supervisor ho zkusí znovu (autorestart=unexpected, exitcodes=0).
+cat > /etc/supervisor/conf.d/bambups-startup.conf <<CONF
+[program:bambups-startup]
+command=/bin/sh -c "sleep 5 && php ${APP_DIR}/artisan modules:start"
+directory=${APP_DIR}
+user=root
+autostart=true
+autorestart=unexpected
+exitcodes=0
+startsecs=0
+startretries=10
+redirect_stderr=true
+stdout_logfile=/var/log/bambups-startup.log
+stdout_logfile_maxbytes=1MB
+stdout_logfile_backups=1
+CONF
+
 systemctl enable --now supervisor >/dev/null
 supervisorctl reread >/dev/null
 supervisorctl update >/dev/null
