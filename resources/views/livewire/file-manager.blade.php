@@ -109,12 +109,42 @@
     @if($this->files->count() > 0)
         <p class="text-xs font-medium text-gray-400 dark:text-bambu-text-dim uppercase tracking-wide mb-2">Soubory</p>
 
+        @php
+            // Sdílená Alpine logika hover panelu (karty i řádky). Kotva = x-ref="anchor", jinak samotný prvek.
+            $hoverXData = "{
+                open: false, t: null, x: 0, y: 0,
+                enter() {
+                    if (!window.matchMedia('(hover: hover)').matches) return;
+                    clearTimeout(this.t);
+                    this.t = setTimeout(() => this.show(), 300);
+                },
+                leave() { clearTimeout(this.t); this.open = false; },
+                show() {
+                    const a = this.\$refs.anchor || this.\$el;
+                    const r = a.getBoundingClientRect(), w = 288, gap = 8, vw = window.innerWidth, vh = window.innerHeight;
+                    let left = r.right + gap;
+                    if (left + w > vw - gap) left = r.left - gap - w;
+                    if (left < gap) left = Math.max(gap, Math.min(r.left, vw - w - gap));
+                    this.x = left;
+                    this.y = Math.max(gap, r.top);
+                    this.open = true;
+                    this.\$nextTick(() => {
+                        const h = this.\$refs.pop ? this.\$refs.pop.offsetHeight : 0;
+                        if (this.y + h > vh - gap) this.y = Math.max(gap, vh - h - gap);
+                    });
+                }
+            }";
+        @endphp
+
         @if($viewMode === 'card')
             {{-- Card view --}}
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                 @foreach($this->files as $file)
-                    <div class="group relative bg-white dark:bg-bambu-dark-2 border border-gray-200 dark:border-bambu-dark-4 rounded-xl overflow-hidden hover:border-green-400 dark:hover:border-bambu-green hover:shadow-sm transition-all cursor-pointer"
-                        onclick="window.location='{{ route('file.show', $file->id) }}'">
+                    <div wire:key="file-card-{{ $file->id }}"
+                        class="group relative bg-white dark:bg-bambu-dark-2 border border-gray-200 dark:border-bambu-dark-4 rounded-xl overflow-hidden hover:border-green-400 dark:hover:border-bambu-green hover:shadow-sm transition-all cursor-pointer"
+                        onclick="window.location='{{ route('file.show', $file->id) }}'"
+                        x-data="{{ $hoverXData }}"
+                        @scroll.window="leave()">
 
                         <div class="aspect-square relative">
                             @if($file->list_thumbnail_url)
@@ -158,6 +188,8 @@
                                 title="Smazat" class="p-1 text-gray-400 hover:text-red-600 text-xs transition-colors">🗑️</button>
                         </div>
 
+                        @include('livewire.partials.file-hover', ['file' => $file, 'withImage' => false])
+
                     </div>
                 @endforeach
             </div>
@@ -178,34 +210,22 @@
                     </thead>
                     <tbody class="divide-y divide-gray-50 dark:divide-bambu-dark-4">
                         @foreach($this->files as $file)
-                            <tr class="hover:bg-gray-50 dark:hover:bg-bambu-dark-3 cursor-pointer transition-colors"
+                            <tr wire:key="file-row-{{ $file->id }}"
+                                class="hover:bg-gray-50 dark:hover:bg-bambu-dark-3 cursor-pointer transition-colors"
                                 onclick="window.location='{{ route('file.show', $file->id) }}'">
-                                <td class="px-4 py-3">
+                                <td class="px-4 py-3"
+                                    x-data="{{ $hoverXData }}"
+                                    @mouseenter="enter()"
+                                    @mouseleave="leave()"
+                                    @scroll.window="leave()">
                                     <div class="flex items-center space-x-3">
-                                        {{-- Thumbnail s tooltip --}}
-                                        <div class="relative shrink-0"
-                                            x-data="{ show: false }"
-                                            @mouseenter="show = true"
-                                            @mouseleave="show = false">
-                                            <div class="w-10 h-10 rounded-lg bg-gray-100 dark:bg-bambu-dark-3 overflow-hidden flex items-center justify-center">
-                                                @if($file->list_thumbnail_url)
-                                                    <img src="{{ $file->list_thumbnail_url }}" class="w-full h-full object-contain" alt="náhled">
-                                                @elseif(str_ends_with(strtolower($file->original_name), '.gcode'))
-                                                    <img src="/images/gcode-placeholder.png" class="w-full h-full object-contain p-1 rounded-t-xl">
-                                                @else
-                                                    <span>🗂️</span>
-                                                @endif
-                                            </div>
-                                            {{-- Tooltip --}}
-                                            @if($file->list_thumbnail_url || str_ends_with(strtolower($file->original_name), '.gcode'))
-                                                <div x-show="show" x-transition
-                                                    class="absolute left-12 top-0 z-50 w-48 h-48 rounded-xl overflow-hidden shadow-xl border border-gray-200 dark:border-bambu-dark-4 bg-white dark:bg-bambu-dark-2 pointer-events-none">
-                                                    @if($file->list_thumbnail_url)
-                                                        <img src="{{ $file->list_thumbnail_url }}" class="w-full h-full object-contain p-2">
-                                                    @else
-                                                        <img src="/images/gcode-placeholder.png" class="w-full h-full object-contain p-4 rounded-t-xl">
-                                                    @endif
-                                                </div>
+                                        <div x-ref="anchor" class="w-10 h-10 shrink-0 rounded-lg bg-gray-100 dark:bg-bambu-dark-3 overflow-hidden flex items-center justify-center">
+                                            @if($file->list_thumbnail_url)
+                                                <img src="{{ $file->list_thumbnail_url }}" class="w-full h-full object-contain" alt="náhled">
+                                            @elseif(str_ends_with(strtolower($file->original_name), '.gcode'))
+                                                <img src="/images/gcode-placeholder.png" class="w-full h-full object-contain p-1 rounded-t-xl">
+                                            @else
+                                                <span>🗂️</span>
                                             @endif
                                         </div>
                                         <div class="min-w-0">
@@ -220,6 +240,7 @@
                                             </div>
                                         </div>
                                     </div>
+                                    @include('livewire.partials.file-hover', ['file' => $file, 'withImage' => true])
                                 </td>
                                 <td class="px-4 py-3 text-gray-500 dark:text-bambu-text-dim text-xs hidden sm:table-cell">
                                     {{ $file->metadata['print_time'] ?? '-' }}
