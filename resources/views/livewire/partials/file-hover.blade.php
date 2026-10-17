@@ -1,7 +1,7 @@
 {{--
     Hover panel s detaily souboru – sdílený pro kartové i řádkové zobrazení.
     Parametry: $file (App\Models\File), $withImage (bool – zvětšený náhled nahoře).
-    Musí být uvnitř prvku s x-data="{{ $hoverXData }}" (open, x, y).
+    Musí být uvnitř prvku s x-data="@include('livewire.partials.file-hover-xdata')".
     position: fixed => panel neořízne overflow-hidden karty ani tabulky.
 --}}
 @php

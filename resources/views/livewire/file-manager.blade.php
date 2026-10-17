@@ -109,33 +109,6 @@
     @if($this->files->count() > 0)
         <p class="text-xs font-medium text-gray-400 dark:text-bambu-text-dim uppercase tracking-wide mb-2">Soubory</p>
 
-        @php
-            // Sdílená Alpine logika hover panelu (karty i řádky). Kotva = x-ref="anchor", jinak samotný prvek.
-            $hoverXData = "{
-                open: false, t: null, x: 0, y: 0,
-                enter() {
-                    if (!window.matchMedia('(hover: hover)').matches) return;
-                    clearTimeout(this.t);
-                    this.t = setTimeout(() => this.show(), 300);
-                },
-                leave() { clearTimeout(this.t); this.open = false; },
-                show() {
-                    const a = this.\$refs.anchor || this.\$el;
-                    const r = a.getBoundingClientRect(), w = 288, gap = 8, vw = window.innerWidth, vh = window.innerHeight;
-                    let left = r.right + gap;
-                    if (left + w > vw - gap) left = r.left - gap - w;
-                    if (left < gap) left = Math.max(gap, Math.min(r.left, vw - w - gap));
-                    this.x = left;
-                    this.y = Math.max(gap, r.top);
-                    this.open = true;
-                    this.\$nextTick(() => {
-                        const h = this.\$refs.pop ? this.\$refs.pop.offsetHeight : 0;
-                        if (this.y + h > vh - gap) this.y = Math.max(gap, vh - h - gap);
-                    });
-                }
-            }";
-        @endphp
-
         @if($viewMode === 'card')
             {{-- Card view --}}
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
@@ -143,10 +116,12 @@
                     <div wire:key="file-card-{{ $file->id }}"
                         class="group relative bg-white dark:bg-bambu-dark-2 border border-gray-200 dark:border-bambu-dark-4 rounded-xl overflow-hidden hover:border-green-400 dark:hover:border-bambu-green hover:shadow-sm transition-all cursor-pointer"
                         onclick="window.location='{{ route('file.show', $file->id) }}'"
-                        x-data="{{ $hoverXData }}"
+                        x-data="@include('livewire.partials.file-hover-xdata')"
+                        @mouseenter="enter()"
+                        @mouseleave="leave()"
                         @scroll.window="leave()">
 
-                        <div class="aspect-square relative">
+                        <div x-ref="anchor" class="aspect-square relative">
                             @if($file->list_thumbnail_url)
                                 <img src="{{ $file->list_thumbnail_url }}" class="w-full h-full object-contain bg-gray-50 dark:bg-bambu-dark-3" alt="náhled">
                             @elseif(str_ends_with(strtolower($file->original_name), '.gcode'))
@@ -214,7 +189,7 @@
                                 class="hover:bg-gray-50 dark:hover:bg-bambu-dark-3 cursor-pointer transition-colors"
                                 onclick="window.location='{{ route('file.show', $file->id) }}'">
                                 <td class="px-4 py-3"
-                                    x-data="{{ $hoverXData }}"
+                                    x-data="@include('livewire.partials.file-hover-xdata')"
                                     @mouseenter="enter()"
                                     @mouseleave="leave()"
                                     @scroll.window="leave()">

@@ -35,10 +35,15 @@
             <div class="divide-y divide-gray-50 dark:divide-bambu-dark-4">
                 @foreach($this->recentFiles as $file)
                     <a href="{{ route('file.show', $file->id) }}"
-                        class="px-5 py-3.5 flex items-center space-x-4 hover:bg-gray-50 dark:hover:bg-bambu-dark-3 transition-colors block">
+                        wire:key="recent-file-{{ $file->id }}"
+                        class="px-5 py-3.5 flex items-center space-x-4 hover:bg-gray-50 dark:hover:bg-bambu-dark-3 transition-colors block"
+                        x-data="@include('livewire.partials.file-hover-xdata')"
+                        @mouseenter="enter()"
+                        @mouseleave="leave()"
+                        @scroll.window="leave()">
 
                         {{-- Thumbnail --}}
-                        <div class="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 dark:bg-bambu-dark-3 shrink-0 flex items-center justify-center">
+                        <div x-ref="anchor" class="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 dark:bg-bambu-dark-3 shrink-0 flex items-center justify-center">
                             @if($file->thumbnail_path)
                                 <img src="{{ route('file.thumbnail', $file->id) }}"
                                     class="w-full h-full object-contain" alt="náhled">
@@ -75,6 +80,8 @@
                                 <span class="px-2 py-0.5 bg-green-100 dark:bg-bambu-dark-3 text-green-700 dark:text-bambu-green text-xs rounded-full font-medium">G-code</span>
                             @endif
                         </div>
+
+                        @include('livewire.partials.file-hover', ['file' => $file, 'withImage' => true])
                     </a>
                 @endforeach
             </div>
