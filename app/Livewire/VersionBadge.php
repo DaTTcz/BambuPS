@@ -38,6 +38,7 @@ class VersionBadge extends Component
             'npm'      => 'Přebuilduji frontend',
             'migrate'  => 'Aktualizuji databázi',
             'cache'    => 'Čistím cache',
+            'services' => 'Restartuji služby na pozadí',
         ];
     }
 

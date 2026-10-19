@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Process;
 
 class UpdateService
 {
+    /** Značka v cache pro "verzi se nepodařilo zjistit" (null Cache neuloží). */
+    private const NO_VERSION = '__unavailable__';
+
     /**
      * Aktuálně nainstalovaná verze - poslední git tag na HEAD.
      * Pokud appka nemá žádný tag (např. čerstvý clone bez release),
@@ -27,28 +30,39 @@ class UpdateService
     }
 
     /**
-     * Nejnovější dostupný release na GitHubu (cachováno na 1 hodinu,
-     * aby appka nezatěžovala GitHub API při každém načtení stránky).
+     * Nejnovější dostupný release na GitHubu. Úspěch se cachuje na 1 hodinu,
+     * neúspěch (bez internetu, výpadek GitHubu, vyčerpaný API limit) na
+     * 10 minut - Cache::remember() totiž null neukládá, takže by se jinak
+     * appka ptala GitHubu (s 5s timeoutem) při každém načtení stránky.
      */
     public function getLatestVersion(): ?string
     {
-        return Cache::remember('bambups:latest_version', 3600, function () {
-            $repo = config('bambups.github_repo');
+        $key    = 'bambups:latest_version';
+        $cached = Cache::get($key);
 
-            try {
-                $response = Http::withHeaders(['Accept' => 'application/vnd.github+json'])
-                    ->timeout(5)
-                    ->get("https://api.github.com/repos/{$repo}/releases/latest");
+        if ($cached !== null) {
+            return $cached === self::NO_VERSION ? null : $cached;
+        }
 
-                if ($response->successful()) {
-                    return $response->json('tag_name');
-                }
-            } catch (\Throwable $e) {
-                // Bez internetu / GitHub nedostupný - appka dál funguje, jen bez info o update
+        $repo = config('bambups.github_repo');
+
+        try {
+            $response = Http::withHeaders(['Accept' => 'application/vnd.github+json'])
+                ->timeout(5)
+                ->get("https://api.github.com/repos/{$repo}/releases/latest");
+
+            $tag = $response->successful() ? $response->json('tag_name') : null;
+
+            if (is_string($tag) && $tag !== '') {
+                Cache::put($key, $tag, 3600);
+                return $tag;
             }
+        } catch (\Throwable $e) {
+            // Bez internetu / GitHub nedostupný - appka dál funguje, jen bez info o update
+        }
 
-            return null;
-        });
+        Cache::put($key, self::NO_VERSION, 600);
+        return null;
     }
 
     /**
@@ -107,6 +121,16 @@ class UpdateService
             'npm'      => 'npm ci --no-audit --no-fund 2>&1 && npm run build 2>&1',
             'migrate'  => 'php artisan migrate --force 2>&1',
             'cache'    => 'php artisan config:clear 2>&1 && php artisan cache:clear 2>&1 && php artisan view:clear 2>&1',
+            // Démoni pod supervisorem (MQTT listener, camera:capture) drží kód
+            // v paměti - bez restartu by dál jeli se starou verzí. Restartujeme
+            // jen ty, které právě běží (vypnuté moduly nezapínáme). go2rtc je
+            // samostatná binárka, s kódem appky se nemění, takže ho necháme být.
+            // Pozn.: `supervisorctl status` vrací nenulový kód, když něco neběží,
+            // proto z něj bereme jen výstup a výsledek kroku určí až restart.
+            'services' => 'progs=$(sudo supervisorctl status 2>/dev/null'
+                . ' | awk \'/^bambups-(mqtt|camera-[0-9]+)[[:space:]]/ && /RUNNING/ {print $1}\');'
+                . ' if [ -n "$progs" ]; then sudo supervisorctl restart $progs 2>&1;'
+                . ' else echo "Žádné běžící služby k restartu."; fi',
             default    => null,
         };
 
