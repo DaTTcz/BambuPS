@@ -118,6 +118,27 @@ class PrinterCommandService
         ]);
     }
 
+    /**
+     * Rozlišení živého obrazu kamery (X1 řada): '720p' nebo '1080p'.
+     * Tiskárna má pevný datový tok (~1 Mbit/s), takže 720p bývá viditelně
+     * čistší. Po změně kamera restartuje enkodér a RTSP stream je cca
+     * 10-30 s nedostupný - go2rtc i camera:capture se připojí samy znovu.
+     */
+    public function setCameraResolution(string $resolution): bool
+    {
+        if (!in_array($resolution, ['720p', '1080p'], true)) {
+            return false;
+        }
+
+        return $this->send([
+            'camera' => [
+                'sequence_id' => '0',
+                'command'     => 'ipcam_resolution_set',
+                'resolution'  => $resolution,
+            ],
+        ]);
+    }
+
     public function send(array $payload): bool
     {
         try {

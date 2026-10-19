@@ -158,6 +158,11 @@ class MqttListenCommand extends Command
             if (isset($print['lights_report'])) $status['lights'] = $print['lights_report'];
             if (isset($print['vt_tray']))       $status['vt_tray'] = $print['vt_tray'];
             if (isset($print['hms']))           $status['hms']    = $print['hms'];
+            // Kamera (rozlišení, RTSP URL, záznam) - posílá se hlavně v plném
+            // stavu (pushall), průběžně jen změny, proto slučujeme.
+            if (isset($print['ipcam']) && is_array($print['ipcam'])) {
+                $status['ipcam'] = array_merge($status['ipcam'] ?? [], $print['ipcam']);
+            }
         }
 
 	// Detekce změn stavu pro notifikace

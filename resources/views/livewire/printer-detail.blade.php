@@ -468,7 +468,7 @@
 <script>
 (function initCamera() {
     var snapshotUrl = '{{ route("printer.snapshot", $printer->id) }}';
-    var go2rtcUrl   = '/go2rtc/stream.html?src=printer_{{ $printer->id }}&controls=false';
+    var go2rtcUrl   = '/go2rtc/stream.html?src=printer_{{ $printer->id }}&controls=false&mode=mse';
     var isStreaming  = false;
     var snapshotInterval = null;
 

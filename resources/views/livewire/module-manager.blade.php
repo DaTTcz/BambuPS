@@ -93,11 +93,39 @@
                             @php $printers = \App\Models\Printer::where('enabled', true)->get(); @endphp
                             @if($printers->count() > 0)
                                 @foreach($printers as $printer)
-                                    <div class="flex items-center justify-between py-1">
-                                        <span class="text-xs font-mono text-gray-600 dark:text-bambu-text-dim">printer_{{ $printer->id }}</span>
-                                        <span class="text-xs text-gray-500 dark:text-bambu-text-dim">{{ $printer->name }} ({{ $printer->ip_address }})</span>
+                                    @php $camRes = $printer->status['ipcam']['resolution'] ?? null; @endphp
+                                    <div class="flex items-center justify-between gap-3 py-1.5">
+                                        <span class="text-xs font-mono text-gray-600 dark:text-bambu-text-dim shrink-0">printer_{{ $printer->id }}</span>
+                                        <span class="text-xs text-gray-500 dark:text-bambu-text-dim truncate flex-1 text-right">{{ $printer->name }} ({{ $printer->ip_address }})</span>
+
+                                        {{-- Rozlišení kamery – jen pokud ho tiskárna hlásí (X1 řada) --}}
+                                        @if($camRes)
+                                            <div class="flex shrink-0 rounded-lg overflow-hidden border border-gray-200 dark:border-bambu-dark-4"
+                                                wire:loading.class="opacity-50 pointer-events-none"
+                                                wire:target="setCameraResolution">
+                                                @foreach(['720p', '1080p'] as $res)
+                                                    <button type="button"
+                                                        @if($camRes !== $res)
+                                                            wire:click="setCameraResolution({{ $printer->id }}, '{{ $res }}')"
+                                                            wire:confirm="Přepnout kameru {{ $printer->name }} na {{ $res }}? Obraz bude asi 30 s nedostupný."
+                                                        @endif
+                                                        @disabled(!$printer->is_online)
+                                                        class="px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+                                                            {{ $camRes === $res
+                                                                ? 'bg-green-600 text-white cursor-default'
+                                                                : 'bg-white dark:bg-bambu-dark-2 text-gray-600 dark:text-bambu-text-dim hover:bg-gray-100 dark:hover:bg-bambu-dark-4' }}">
+                                                        {{ $res }}
+                                                    </button>
+                                                @endforeach
+                                            </div>
+                                        @else
+                                            <span class="text-xs text-gray-400 dark:text-bambu-text-dim shrink-0 w-[88px] text-center" title="Tiskárna zatím nenahlásila rozlišení kamery">—</span>
+                                        @endif
                                     </div>
                                 @endforeach
+                                <p class="text-xs text-gray-400 dark:text-bambu-text-dim mt-2">
+                                    Kamera X1 má pevný datový tok (~1 Mbit/s), proto 720p obvykle vypadá čistěji než 1080p.
+                                </p>
                             @else
                                 <p class="text-xs text-gray-400 dark:text-bambu-text-dim">Žádné aktivní tiskárny</p>
                             @endif

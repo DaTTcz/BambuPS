@@ -23,7 +23,9 @@ class CameraCaptureCommand extends Command
                 continue;
             }
 
-            $rtspUrl  = 'rtsps://bblp:' . $printer->access_code . '@' . $printer->ip_address . ':322/streaming/live/1';
+            // Bereme z go2rtc restreamu, ne přímo z tiskárny – na tiskárnu tak
+            // vede jen jedno RTSPS spojení (go2rtc), sdílené se živým streamem.
+            $rtspUrl  = 'rtsp://127.0.0.1:8554/printer_' . $printer->id;
             $camDir   = storage_path('app/cameras/' . $printer->id);
             $m3u8     = $camDir . '/stream.m3u8';
             $snapshot = $camDir . '/snapshot.jpg';

@@ -3,7 +3,9 @@
 namespace App\Livewire;
 
 use App\Models\Module;
+use App\Models\Printer;
 use App\Services\CameraProvisionService;
+use App\Services\PrinterCommandService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
@@ -98,6 +100,35 @@ class ModuleManager extends Component
         }
 
         $this->editingId = null;
+    }
+
+    /**
+     * Přepne rozlišení kamery tiskárny přes MQTT. Tiskárna si nastavení
+     * pamatuje sama; skutečný stav pak potvrdí v MQTT reportu (print.ipcam).
+     */
+    public function setCameraResolution(int $printerId, string $resolution): void
+    {
+        if (!in_array($resolution, ['720p', '1080p'], true)) {
+            return;
+        }
+
+        $printer = Printer::findOrFail($printerId);
+        $success = (new PrinterCommandService($printer))->setCameraResolution($resolution);
+
+        if ($success) {
+            // Optimisticky uložit, ať přepínač hned ukazuje novou hodnotu -
+            // MQTT listener ji za chvíli přepíše skutečným stavem z tiskárny.
+            $status = $printer->status ?? [];
+            $status['ipcam']['resolution'] = $resolution;
+            $printer->update(['status' => $status]);
+        }
+
+        $this->dispatch('toast',
+            type: $success ? 'success' : 'error',
+            message: $success
+                ? "Kamera {$printer->name} přepnuta na {$resolution} – obraz bude cca 30 s nedostupný."
+                : 'Nepodařilo se změnit rozlišení kamery.'
+        );
     }
 
     public function createSlicerToken(): void
