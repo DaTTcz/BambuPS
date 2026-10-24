@@ -22,6 +22,8 @@ class FileDetailPage extends Component
     public ?int $selectingAmsForFilament = null;
     public ?int $selectingAmsUnit        = null;
     public bool $useBedLeveling   = true;
+    /** Vyrovnání podložky: auto (podle BedMeshService) | always | never */
+    public string $bedLevelingMode = 'auto';
     public bool $useTimelapse     = false;
     public bool $useAms           = true;
     public bool $useLayerInspect  = false;
@@ -31,6 +33,9 @@ class FileDetailPage extends Component
     // Vybraný typ FYZICKÉ podložky pro patch teploty v gcode - nesouvisí
     // s $bedType výše (to je MQTT pole, které má zůstat "auto").
     public string $selectedBedPlate = '';
+
+    /** Obsahuje gcode zvolené desky skenování 1. vrstvy? null = nevíme */
+    public ?bool $fileHasLayerScan = null;
 
     // Rychlé akce (stejné jako v přehledu souborů)
     public bool $isReparsing      = false;
@@ -122,12 +127,23 @@ class FileDetailPage extends Component
         // Načteme uložené předvolby
         $defaults = session('print_defaults', []);
         $this->useBedLeveling   = $defaults['useBedLeveling']   ?? true;
+        $this->bedLevelingMode  = $defaults['bedLevelingMode']  ?? 'auto';
         $this->useTimelapse     = $defaults['useTimelapse']      ?? false;
         $this->useAms           = $defaults['useAms']            ?? true;
         $this->useLayerInspect  = $defaults['useLayerInspect']   ?? false;
         $this->useFlowCali      = $defaults['useFlowCali']       ?? false;
         $this->useVibrationCali = $defaults['useVibrationCali']  ?? false;
         $this->bedType          = $defaults['bedType']           ?? 'auto';
+        // Kontrola 1. vrstvy má smysl jen u gcode se skenovacími příkazy
+        // (slicer je vloží jen při scan_first_layer = 1).
+        $this->fileHasLayerScan = (new \App\Services\GcodePatcherService())->hasFirstLayerScan(
+            storage_path('app/private/' . $this->file->disk_path),
+            $this->selectedPlate
+        );
+        if ($this->fileHasLayerScan === false) {
+            $this->useLayerInspect = false;
+        }
+
         // Výchozí volba = typ podložky, pro který byl soubor naslicovaný
         $this->selectedBedPlate = $this->file->metadata['bed_type_canonical']
             ?? $this->file->metadata['bed_type']
@@ -165,11 +181,42 @@ class FileDetailPage extends Component
         $this->printPrinterId  = null;
     }
 
+    /** Teplota podložky (1. vrstva) pro právě zvolený typ podložky */
+    private function selectedBedTemp(): ?int
+    {
+        $options = $this->file->metadata['bed_temp_options'] ?? [];
+        $temp    = $options[$this->selectedBedPlate]['initial']
+            ?? $this->file->metadata['bed_temp_initial_layer']
+            ?? null;
+        return $temp !== null ? (int) $temp : null;
+    }
+
+    /**
+     * Doporučení chytrého vyrovnání podložky pro zvolenou tiskárnu,
+     * podložku a teplotu: ['level' => bool, 'reason' => string]
+     */
+    public function getBedLevelingAdviceProperty(): ?array
+    {
+        if (!$this->printPrinterId) {
+            return null;
+        }
+        $printer = Printer::find($this->printPrinterId);
+        if (!$printer) {
+            return null;
+        }
+        return (new \App\Services\BedMeshService())->advise(
+            $printer,
+            $this->selectedBedPlate ?: ($this->file->metadata['bed_type'] ?? null),
+            $this->selectedBedTemp()
+        );
+    }
+
     public function saveAsDefaults(): void
     {
         session([
             'print_defaults' => [
                 'useBedLeveling'   => $this->useBedLeveling,
+                'bedLevelingMode'  => $this->bedLevelingMode,
                 'useTimelapse'     => $this->useTimelapse,
                 'useAms'           => $this->useAms,
                 'useLayerInspect'  => $this->useLayerInspect,
@@ -217,14 +264,26 @@ class FileDetailPage extends Component
 
             if ($this->selectedBedPlate && $this->selectedBedPlate !== $originalBedType) {
                 $options = $this->file->metadata['bed_temp_options'] ?? [];
-                if (isset($options[$this->selectedBedPlate]['initial'])) {
+                $to      = $options[$this->selectedBedPlate] ?? null;
+                // Teploty původní podložky - z options, jinak z metadat souboru
+                $from    = $options[$originalBedType] ?? [
+                    'initial' => (int) ($this->file->metadata['bed_temp_initial_layer'] ?? 0),
+                    'other'   => (int) ($this->file->metadata['bed_temp'] ?? 0),
+                ];
+
+                if ($to && (int) $from['initial'] > 0) {
                     $patcher     = new \App\Services\GcodePatcherService();
-                    $patchedPath = $patcher->patchBedTemp(
+                    $patchedPath = $patcher->patchForBedPlate(
                         $localPath,
                         $this->selectedPlate,
-                        (int) $options[$this->selectedBedPlate]['initial']
+                        $originalBedType,
+                        $this->selectedBedPlate,
+                        $from,
+                        $to,
+                        $this->file->metadata['printer_model'] ?? null,
                     );
                     $uploadPath = $patchedPath;
+                    \Log::info('Gcode upraven pro podložku ' . $this->selectedBedPlate . ': ' . implode('; ', $patcher->notes));
                 }
             }
 
@@ -257,6 +316,13 @@ class FileDetailPage extends Component
                 ];
             }, array_values($this->amsMapping));
 
+            // Vyrovnání podložky podle zvoleného režimu
+            $this->useBedLeveling = match ($this->bedLevelingMode) {
+                'always' => true,
+                'never'  => false,
+                default  => $this->bedLevelingAdvice['level'] ?? true,
+            };
+
             $cmd     = new PrinterCommandService($printer);
             $started = $cmd->startPrint(
                 $this->file->original_name,
@@ -275,7 +341,11 @@ class FileDetailPage extends Component
                 // Záznam do historie - MQTT listener ho podle task_id spáruje,
                 // jakmile se tisk na tiskárně opravdu rozběhne.
                 try {
-                    PrintHistoryService::queue($printer, $this->file, $this->selectedPlate, $cmd->lastTaskId, auth()->id());
+                    PrintHistoryService::queue(
+                        $printer, $this->file, $this->selectedPlate, $cmd->lastTaskId, auth()->id(),
+                        $this->selectedBedPlate ?: ($this->file->metadata['bed_type'] ?? null),
+                        $this->selectedBedTemp()
+                    );
                 } catch (\Throwable $e) {
                     \Log::error('Historie tisku (queue): ' . $e->getMessage());
                 }

@@ -64,6 +64,17 @@ Route::middleware([
         return view('modules');
     })->name('modules.settings');
 
+    Route::get('/settings/versions', function () {
+        return view('versions');
+    })->name('versions.settings');
+
+    // Stažení zálohy databáze (název se ověřuje v BackupService)
+    Route::get('/settings/versions/backups/{name}', function (string $name) {
+        $path = (new \App\Services\BackupService())->pathFor($name);
+        abort_unless($path, 404);
+        return response()->download($path, $name);
+    })->where('name', '[A-Za-z0-9._-]+')->name('versions.backup.download');
+
     Route::get('/settings/notifications', function () {
         return view('notifications');
     })->name('notifications.settings');

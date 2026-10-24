@@ -409,7 +409,7 @@
                             <div class="bg-gray-50 rounded-lg px-3 py-2 mb-2">
                                 <div class="flex items-center justify-between">
                                     <span class="text-sm text-gray-600">Typ podložky</span>
-                                    <select wire:model="selectedBedPlate" class="border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white">
+                                    <select wire:model.live="selectedBedPlate" class="border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white">
                                         @foreach($file->metadata['bed_temp_options'] as $plateLabel => $temps)
                                             <option value="{{ $plateLabel }}">{{ $plateLabel }} ({{ $temps['initial'] }}°C)</option>
                                         @endforeach
@@ -417,17 +417,33 @@
                                 </div>
                                 @if($selectedBedPlate !== ($file->metadata['bed_type_canonical'] ?? $file->metadata['bed_type'] ?? ''))
                                     <p class="text-xs text-amber-600 mt-1">
-                                        ⚠️ Jiná podložka, než pro kterou byl soubor naslicovaný ({{ $file->metadata['bed_type'] ?? '?' }}) - appka před tiskem upraví teplotu v souboru.
+                                        ⚠️ Jiná podložka, než pro kterou byl soubor naslicovaný ({{ $file->metadata['bed_type'] ?? '?' }}) - appka před tiskem upraví v kopii souboru teplotu podložky a Z-offset pro Textured PEI.
                                     </p>
                                 @endif
                             </div>
                         @endif
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <label class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                        {{-- Chytré vyrovnání podložky --}}
+                        @php $advice = $this->bedLevelingAdvice; @endphp
+                        <div class="bg-gray-50 rounded-lg px-3 py-2 mb-2">
+                            <div class="flex items-center justify-between gap-3">
                                 <span class="text-sm text-gray-600">Vyrovnání podložky</span>
-                                <input wire:model="useBedLeveling" type="checkbox" class="rounded text-blue-600">
-                            </label>
+                                <select wire:model.live="bedLevelingMode" class="border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white">
+                                    <option value="auto">Automaticky</option>
+                                    <option value="always">Vždy měřit</option>
+                                    <option value="never">Nikdy neměřit</option>
+                                </select>
+                            </div>
+                            @if($bedLevelingMode === 'auto' && $advice)
+                                <p class="text-xs mt-1 {{ $advice['level'] ? 'text-amber-600' : 'text-green-700' }}">
+                                    {{ $advice['level'] ? '📏 Změří se.' : '⏩ Neměří se.' }} {{ $advice['reason'] }}
+                                </p>
+                            @elseif($bedLevelingMode === 'never')
+                                <p class="text-xs mt-1 text-gray-500">Použije se mesh, který má tiskárna uložený z posledního měření.</p>
+                            @endif
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <label class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
                                 <span class="text-sm text-gray-600">Použít AMS</span>
                                 <input wire:model="useAms" type="checkbox" class="rounded text-blue-600">
@@ -436,9 +452,13 @@
                                 <span class="text-sm text-gray-600">Timelapse</span>
                                 <input wire:model="useTimelapse" type="checkbox" class="rounded text-blue-600">
                             </label>
-                            <label class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                                <span class="text-sm text-gray-600">Kontrola 1. vrstvy</span>
-                                <input wire:model="useLayerInspect" type="checkbox" class="rounded text-blue-600">
+                            <label class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 {{ $fileHasLayerScan === false ? 'opacity-50 cursor-not-allowed' : '' }}"
+                                @if($fileHasLayerScan === false) title="Soubor byl naslicovaný bez skenu 1. vrstvy (scan_first_layer = 0) - tiskárna nemá co spustit." @endif>
+                                <span class="text-sm text-gray-600">
+                                    Kontrola 1. vrstvy
+                                    @if($fileHasLayerScan === false)<span class="block text-xs text-gray-400">není v souboru</span>@endif
+                                </span>
+                                <input wire:model="useLayerInspect" type="checkbox" class="rounded text-blue-600" @disabled($fileHasLayerScan === false)>
                             </label>
                             <label class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
                                 <span class="text-sm text-gray-600">Kalibrace průtoku</span>

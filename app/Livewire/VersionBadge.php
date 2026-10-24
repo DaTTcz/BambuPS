@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Services\UpdateService;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 class VersionBadge extends Component
@@ -32,6 +33,7 @@ class VersionBadge extends Component
     protected function updateStepList(): array
     {
         return [
+            'backup'   => 'Zálohuji databázi',
             'fetch'    => 'Stahuji seznam verzí z GitHubu',
             'checkout' => 'Přepínám na novou verzi',
             'composer' => 'Aktualizuji PHP závislosti',
@@ -54,6 +56,33 @@ class VersionBadge extends Component
         $this->updateStatus   = array_fill_keys(array_keys($this->updateSteps), 'pending');
         $this->updateFailed   = false;
         $this->updateError    = '';
+        $this->showUpdateModal = true;
+    }
+
+    /**
+     * Přechod na konkrétní verzi (i starší) ze stránky Nastavení → Verze.
+     * Běží stejnými kroky jako běžná aktualizace - po checkoutu je dál
+     * vykonává už kód cílové verze, proto nesmí přibýt žádné nové public
+     * vlastnosti (starší verze komponenty by je při hydrataci neznala).
+     */
+    #[On('start-version-change')]
+    public function startUpdateTo(string $version): void
+    {
+        $service = new UpdateService();
+        if (!$service->isSwitchableVersion($version)) {
+            $this->dispatch('toast', type: 'error', message: "Na verzi {$version} nejde přejít.");
+            return;
+        }
+        if ($version === $service->getCurrentVersion()) {
+            $this->dispatch('toast', type: 'success', message: "Verze {$version} už je nainstalovaná.");
+            return;
+        }
+
+        $this->targetVersion   = $version;
+        $this->updateSteps     = $this->updateStepList();
+        $this->updateStatus    = array_fill_keys(array_keys($this->updateSteps), 'pending');
+        $this->updateFailed    = false;
+        $this->updateError     = '';
         $this->showUpdateModal = true;
     }
 

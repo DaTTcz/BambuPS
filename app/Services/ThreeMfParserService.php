@@ -214,6 +214,7 @@ class ThreeMfParserService
                 // "textured_plate_temp" (100°C).
                 $bedTypeAliases = [
                     'cool plate (supertack)'              => 'supertack_plate_temp',
+                    'supertack plate'                      => 'supertack_plate_temp',   // OrcaSlicer
                     'cool plate'                           => 'cool_plate_temp',
                     'engineering plate'                    => 'eng_plate_temp',
                     'smooth pei plate / high temp plate'   => 'hot_plate_temp',
@@ -258,9 +259,10 @@ class ThreeMfParserService
                 $canonicalLabelForCurrent = null;
                 foreach ($canonicalBedTypes as $label => $key) {
                     if (isset($json[$key][0])) {
+                        // initial = 1. vrstva (*_initial_layer), other = ostatní vrstvy
                         $bedTempOptions[$label] = [
-                            'initial' => (int) $json[$key][0],
-                            'other'   => (int) ($json[$key . '_initial_layer'][0] ?? $json[$key][0]),
+                            'initial' => (int) ($json[$key . '_initial_layer'][0] ?? $json[$key][0]),
+                            'other'   => (int) $json[$key][0],
                         ];
                     }
                     // Zjistíme, který kanonický popisek odpovídá souborem

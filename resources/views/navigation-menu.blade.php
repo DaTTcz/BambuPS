@@ -52,16 +52,22 @@
                                 class="flex items-center space-x-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-4 {{ request()->routeIs('modules.settings') ? 'font-semibold text-green-700 dark:text-bambu-green' : '' }}">
                                 <span>🧩</span><span>Moduly</span>
                             </a>
+                            <a href="{{ route('versions.settings') }}"
+                                class="flex items-center space-x-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-4 {{ request()->routeIs('versions.settings') ? 'font-semibold text-green-700 dark:text-bambu-green' : '' }}">
+                                <span>🏷️</span><span>Verze a zálohy</span>
+                            </a>
                         </div>
                     </div>
                 </div>
             </div>
 
             {{-- Right side --}}
-            <div class="hidden sm:flex items-center space-x-2">
+            {{-- Kontejner je vidět i na mobilu kvůli modalu aktualizace ve version-badge
+                 (samotný odznak verze se na mobilu skrývá uvnitř komponenty) --}}
+            <div class="flex items-center space-x-2">
 		<livewire:version-badge />
                 {{-- Dark mode toggle --}}
-                <div x-data="{ dark: localStorage.getItem('darkMode') === 'true' }">
+                <div class="hidden sm:block" x-data="{ dark: localStorage.getItem('darkMode') === 'true' }">
                     <button @click="dark = !dark; localStorage.setItem('darkMode', dark); document.documentElement.classList.toggle('dark', dark)"
                         class="p-2 rounded-lg text-gray-500 dark:text-bambu-text-dim hover:bg-gray-100 dark:hover:bg-bambu-dark-3 transition-colors text-base">
                         <span x-show="!dark">🌙</span>
@@ -70,7 +76,7 @@
                 </div>
 
                 {{-- User dropdown --}}
-                <div class="relative" x-data="{ userOpen: false }">
+                <div class="relative hidden sm:block" x-data="{ userOpen: false }">
                     <button @click="userOpen = !userOpen" @click.outside="userOpen = false"
                         class="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text-dim hover:bg-gray-50 dark:hover:bg-bambu-dark-3 transition-colors">
                         <div class="w-7 h-7 rounded-full bg-green-100 dark:bg-bambu-dark-4 flex items-center justify-center text-green-700 dark:text-bambu-green font-bold text-xs">
@@ -136,6 +142,7 @@
             <a href="{{ route('printers.manage') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">⚙️ Správa tiskáren</a>
             <a href="{{ route('notifications.settings') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">🔔 Notifikace</a>
             <a href="{{ route('modules.settings') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">🧩 Moduly</a>
+            <a href="{{ route('versions.settings') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">🏷️ Verze a zálohy</a>
         </div>
         <div class="border-t border-gray-100 dark:border-bambu-dark-4 p-3 space-y-1">
             <a href="{{ route('profile.show') }}" class="block px-3 py-2 rounded-lg text-sm text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">👤 Profil</a>

@@ -8,6 +8,7 @@ use App\Services\BambuMqttService;
 use Illuminate\Console\Command;
 use App\Services\NotificationService;
 use App\Services\PrintHistoryService;
+use App\Services\BedMeshService;
 use App\Services\HmsService;
 use Carbon\Carbon;
 
@@ -54,6 +55,14 @@ class MqttListenCommand extends Command
                 }
 
                 $this->info('Připojeno k: ' . $printer->name);
+
+                // Tiskárna byla delší dobu nedostupná -> nejspíš byla vypnutá
+                // a mesh podložky nemusí platit. Krátký výpadek (restart
+                // listeneru, síť) měření nezneplatní.
+                $printer->refresh();
+                if ($printer->last_seen_at && $printer->last_seen_at->lt(now()->subSeconds(BedMeshService::OFFLINE_INVALIDATE_SECONDS))) {
+                    (new BedMeshService())->invalidate($printer, 'Tiskárna byla od posledního měření offline (' . $printer->last_seen_at->diffForHumans() . ')');
+                }
                 $mqtt->requestStatus();
                 $lastPushallAt = time();
 
@@ -205,6 +214,15 @@ class MqttListenCommand extends Command
             (new PrintHistoryService())->sync($printer, $printer->status ?? [], $status);
         } catch (\Throwable $e) {
             \Log::error('Historie tisku: ' . $e->getMessage());
+        }
+
+        // Chytré vyrovnání podložky - zachytit, že tiskárna právě měří
+        try {
+            if (isset($data['print'])) {
+                (new BedMeshService())->trackMessage($printer, $data['print'], $status);
+            }
+        } catch (\Throwable $e) {
+            \Log::error('Mesh podložky: ' . $e->getMessage());
         }
 
         $printer->update([

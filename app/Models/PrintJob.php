@@ -19,6 +19,7 @@ class PrintJob extends Model
     protected $fillable = [
         'printer_id', 'file_id', 'user_id',
         'printer_name', 'name', 'plate_index',
+        'bed_type', 'bed_temp', 'bed_leveled',
         'source', 'task_id', 'status',
         'started_at', 'ended_at', 'duration_seconds', 'estimated_seconds',
         'progress', 'layer_reached', 'total_layers',
@@ -32,6 +33,7 @@ class PrintJob extends Model
         'filaments'  => 'array',
         'hms'        => 'array',
         'filament_g' => 'float',
+        'bed_leveled' => 'boolean',
     ];
 
     public function printer(): BelongsTo

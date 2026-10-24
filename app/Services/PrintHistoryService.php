@@ -30,7 +30,7 @@ class PrintHistoryService
     /** Poslední zpracovaný [stav, task_id] na tiskárnu - drží se v paměti listeneru */
     private static array $lastSeen = [];
 
-    public static function queue(Printer $printer, File $file, int $plateIndex, ?string $taskId, ?int $userId): PrintJob
+    public static function queue(Printer $printer, File $file, int $plateIndex, ?string $taskId, ?int $userId, ?string $bedType = null, ?int $bedTemp = null): PrintJob
     {
         $plates = $file->metadata['plates'] ?? [];
         $plate  = collect($plates)->firstWhere('index', $plateIndex) ?? [];
@@ -52,6 +52,8 @@ class PrintHistoryService
             'user_id'           => $userId,
             'name'              => pathinfo($file->original_name, PATHINFO_FILENAME),
             'plate_index'       => $plateIndex,
+            'bed_type'          => $bedType,
+            'bed_temp'          => $bedTemp,
             'source'            => 'bambups',
             'estimated_seconds' => $estimated ? (int) $estimated : null,
             'total_layers'      => $plate['total_layer_num'] ?? null,

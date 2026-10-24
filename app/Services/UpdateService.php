@@ -93,9 +93,78 @@ class UpdateService
         return ltrim($version, 'vV');
     }
 
+    /** Porovnání verzí (v0.1.10 > v0.1.9); vrací -1/0/1, null pokud některá není semver */
+    public function compareVersions(string $a, string $b): ?int
+    {
+        $a = $this->normalizeVersion($a);
+        $b = $this->normalizeVersion($b);
+        if (!preg_match('/^\d+\.\d+\.\d+/', $a) || !preg_match('/^\d+\.\d+\.\d+/', $b)) {
+            return null;
+        }
+        return version_compare($a, $b);
+    }
+
+    /**
+     * Vydané verze z GitHubu, na které jde přejít (od min_switch_version),
+     * nejnovější první. Cache 1 h, při chybě 10 min (stejně jako getLatestVersion).
+     *
+     * @return array<int, array{tag: string, name: string, body: string, published_at: ?string, prerelease: bool}>
+     */
+    public function getReleases(): array
+    {
+        $key    = 'bambups:releases';
+        $cached = Cache::get($key);
+        if (is_array($cached)) {
+            return $cached;
+        }
+        if ($cached === self::NO_VERSION) {
+            return [];
+        }
+
+        $repo = config('bambups.github_repo');
+        $min  = config('bambups.min_switch_version', 'v0.1.10');
+
+        try {
+            $response = Http::withHeaders(['Accept' => 'application/vnd.github+json'])
+                ->timeout(8)
+                ->get("https://api.github.com/repos/{$repo}/releases", ['per_page' => 50]);
+
+            if ($response->successful()) {
+                $releases = collect($response->json())
+                    ->filter(fn ($r) => empty($r['draft']) && !empty($r['tag_name']))
+                    ->filter(fn ($r) => ($this->compareVersions($r['tag_name'], $min) ?? -1) >= 0)
+                    ->map(fn ($r) => [
+                        'tag'          => $r['tag_name'],
+                        'name'         => $r['name'] ?: $r['tag_name'],
+                        'body'         => (string) ($r['body'] ?? ''),
+                        'published_at' => $r['published_at'] ?? null,
+                        'prerelease'   => (bool) ($r['prerelease'] ?? false),
+                    ])
+                    ->sort(fn ($x, $y) => $this->compareVersions($y['tag'], $x['tag']) ?? 0)
+                    ->values()
+                    ->all();
+
+                Cache::put($key, $releases, 3600);
+                return $releases;
+            }
+        } catch (\Throwable $e) {
+            // bez internetu - stránka verzí ukáže jen hlášku
+        }
+
+        Cache::put($key, self::NO_VERSION, 600);
+        return [];
+    }
+
+    /** Je verze v seznamu, na který dovolíme přejít? */
+    public function isSwitchableVersion(string $tag): bool
+    {
+        return collect($this->getReleases())->contains('tag', $tag);
+    }
+
     public function clearVersionCache(): void
     {
         Cache::forget('bambups:latest_version');
+        Cache::forget('bambups:releases');
     }
 
     /**
@@ -109,6 +178,14 @@ class UpdateService
      */
     public function runUpdateStep(string $step, string $targetVersion): array
     {
+        // Záloha databáze před změnou verze - řeší se v PHP, ne shellem.
+        // Musí být PRVNÍ krok: běží ještě kódem současné verze (po checkoutu
+        // už se další kroky volají kódem cílové verze).
+        if ($step === 'backup') {
+            $result = (new BackupService())->create('pred-' . $targetVersion);
+            return ['ok' => $result['ok'], 'output' => $result['output']];
+        }
+
         $path = config('bambups.app_path');
 
         $command = match ($step) {

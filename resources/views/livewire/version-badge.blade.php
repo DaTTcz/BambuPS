@@ -1,4 +1,6 @@
 <div class="flex items-center">
+    {{-- Odznak jen od sm výš; modal níž je vidět i na mobilu (přechod na verzi ze stránky Verze) --}}
+    <div class="hidden sm:flex items-center">
     @if($this->updateAvailable)
         <button wire:click="startUpdate"
             class="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-green-50 dark:bg-bambu-dark-3 text-green-700 dark:text-bambu-green border border-green-200 dark:border-bambu-dark-4 hover:bg-green-100 dark:hover:bg-bambu-dark-4 transition-colors">
@@ -19,6 +21,7 @@
             </button>
         </span>
     @endif
+    </div>
 
     {{-- Modal: Live progress checklist aktualizace --}}
     @if($showUpdateModal)
@@ -26,10 +29,12 @@
             $totalSteps = count($updateSteps);
             $doneCount  = collect($updateStatus)->filter(fn ($status) => $status === 'done')->count();
             $progressPct = $totalSteps > 0 ? (int) round($doneCount / $totalSteps * 100) : 0;
+            $isDowngrade = (new \App\Services\UpdateService())->compareVersions($targetVersion, $this->currentVersion) === -1;
         @endphp
         <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
             x-data="{
                 steps: @js(array_keys($updateSteps)),
+                downgrade: @js($isDowngrade),
                 current: 0,
                 finishing: false,
                 async run() {
@@ -42,13 +47,22 @@
                     this.finishing = true;
                     await $wire.finishUpdate();
                     this.finishing = false;
+                    // Načíst stránku znovu už s novým kódem/assety. Po návratu
+                    // na starší verzi nemusí aktuální stránka existovat
+                    // (např. Nastavení → Verze), proto na dashboard.
+                    if (!@this.updateFailed) {
+                        setTimeout(() => {
+                            if (this.downgrade) { window.location.href = '{{ route('dashboard') }}'; }
+                            else { window.location.reload(); }
+                        }, 1200);
+                    }
                 }
             }"
             x-init="run()">
             <div class="bg-white dark:bg-bambu-dark-2 border border-gray-100 dark:border-bambu-dark-4 rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
                 <div class="flex items-center justify-between mb-2">
                     <h3 class="text-lg font-semibold text-gray-800 dark:text-bambu-text">
-                        Aktualizuji na {{ $targetVersion }}...
+                        {{ $isDowngrade ? 'Vracím se na' : 'Aktualizuji na' }} {{ $targetVersion }}...
                     </h3>
                     <span class="text-xs text-gray-400 dark:text-bambu-text-dim font-mono" x-show="!finishing">
                         {{ $doneCount }}/{{ $totalSteps }}

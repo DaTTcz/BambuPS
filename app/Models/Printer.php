@@ -15,6 +15,7 @@ class Printer extends Model
         'enabled',
         'status',
         'pending_ams_kick',
+        'bed_mesh',
         'last_seen_at',
     ];
 
@@ -22,6 +23,7 @@ class Printer extends Model
         'enabled'          => 'boolean',
         'status'           => 'array',
         'pending_ams_kick' => 'array',
+        'bed_mesh'         => 'array',
         'last_seen_at'     => 'datetime',
     ];
 
