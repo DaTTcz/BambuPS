@@ -89,6 +89,10 @@
                 <p class="text-sm font-medium text-gray-700 mb-2">Odesílat při:</p>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <label class="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
+                        <input wire:model="emailOnStart" type="checkbox" class="rounded text-blue-600">
+                        <span class="text-sm text-gray-600">🖨️ Začátek tisku</span>
+                    </label>
+                    <label class="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
                         <input wire:model="emailOnDone" type="checkbox" class="rounded text-blue-600">
                         <span class="text-sm text-gray-600">✅ Dokončení tisku</span>
                     </label>
@@ -158,6 +162,10 @@
             <div>
                 <p class="text-sm font-medium text-gray-700 mb-2">Odesílat při:</p>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label class="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
+                        <input wire:model="telegramOnStart" type="checkbox" class="rounded text-blue-600">
+                        <span class="text-sm text-gray-600">🖨️ Začátek tisku</span>
+                    </label>
                     <label class="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
                         <input wire:model="telegramOnDone" type="checkbox" class="rounded text-blue-600">
                         <span class="text-sm text-gray-600">✅ Dokončení tisku</span>
@@ -237,6 +245,10 @@
             <div>
                 <p class="text-sm font-medium text-gray-700 mb-2">Odesílat při:</p>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label class="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
+                        <input wire:model="mqttOnStart" type="checkbox" class="rounded text-blue-600">
+                        <span class="text-sm text-gray-600">🖨️ Začátek tisku</span>
+                    </label>
                     <label class="flex items-center space-x-2 bg-gray-50 rounded-lg px-3 py-2">
                         <input wire:model="mqttOnDone" type="checkbox" class="rounded text-blue-600">
                         <span class="text-sm text-gray-600">✅ Dokončení tisku</span>

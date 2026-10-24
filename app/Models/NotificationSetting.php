@@ -11,6 +11,7 @@ class NotificationSetting extends Model
         'channel',
         'enabled',
         'config',
+        'on_print_start',
         'on_print_done',
         'on_print_failed',
         'on_hms_error',
@@ -20,6 +21,7 @@ class NotificationSetting extends Model
     protected $casts = [
         'enabled'            => 'boolean',
         'config'             => 'array',
+        'on_print_start'     => 'boolean',
         'on_print_done'      => 'boolean',
         'on_print_failed'    => 'boolean',
         'on_hms_error'       => 'boolean',

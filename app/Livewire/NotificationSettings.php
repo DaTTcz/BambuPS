@@ -11,6 +11,7 @@ class NotificationSettings extends Component
     // Email
     public bool $emailEnabled       = false;
     public string $emailAddress     = '';
+    public bool $emailOnStart = true;
     public bool $emailOnDone        = true;
     public bool $emailOnFailed      = true;
     public bool $emailOnHms         = true;
@@ -29,6 +30,7 @@ class NotificationSettings extends Component
     public bool $telegramEnabled    = false;
     public string $telegramBotToken = '';
     public string $telegramChatId   = '';
+    public bool $telegramOnStart = true;
     public bool $telegramOnDone     = true;
     public bool $telegramOnFailed   = true;
     public bool $telegramOnHms      = true;
@@ -41,6 +43,7 @@ class NotificationSettings extends Component
     public string $mqttUsername     = '';
     public string $mqttPassword     = '';
     public string $mqttTopic        = 'bambups/events';
+    public bool $mqttOnStart = true;
     public bool $mqttOnDone         = true;
     public bool $mqttOnFailed       = true;
     public bool $mqttOnHms          = true;
@@ -53,6 +56,7 @@ class NotificationSettings extends Component
         if ($email = $settings->get('email')) {
             $this->emailEnabled    = $email->enabled;
             $this->emailAddress    = $email->config['address'] ?? '';
+            $this->emailOnStart = $email->on_print_start ?? true;
             $this->emailOnDone     = $email->on_print_done;
             $this->emailOnFailed   = $email->on_print_failed;
             $this->emailOnHms      = $email->on_hms_error;
@@ -71,6 +75,7 @@ class NotificationSettings extends Component
             $this->telegramEnabled    = $telegram->enabled;
             $this->telegramBotToken   = $telegram->config['bot_token'] ?? '';
             $this->telegramChatId     = $telegram->config['chat_id']   ?? '';
+            $this->telegramOnStart = $telegram->on_print_start ?? true;
             $this->telegramOnDone     = $telegram->on_print_done;
             $this->telegramOnFailed   = $telegram->on_print_failed;
             $this->telegramOnHms      = $telegram->on_hms_error;
@@ -84,6 +89,7 @@ class NotificationSettings extends Component
             $this->mqttUsername   = $mqtt->config['username'] ?? '';
             $this->mqttPassword   = $mqtt->config['password'] ?? '';
             $this->mqttTopic      = $mqtt->config['topic']    ?? 'bambups/events';
+            $this->mqttOnStart = $mqtt->on_print_start ?? true;
             $this->mqttOnDone     = $mqtt->on_print_done;
             $this->mqttOnFailed   = $mqtt->on_print_failed;
             $this->mqttOnHms      = $mqtt->on_hms_error;
@@ -102,6 +108,7 @@ class NotificationSettings extends Component
             [
                 'enabled'            => $this->emailEnabled,
                 'config'             => ['address' => $this->emailAddress],
+                'on_print_start'     => $this->emailOnStart,
                 'on_print_done'      => $this->emailOnDone,
                 'on_print_failed'    => $this->emailOnFailed,
                 'on_hms_error'       => $this->emailOnHms,
@@ -148,6 +155,7 @@ class NotificationSettings extends Component
                     'bot_token' => $this->telegramBotToken,
                     'chat_id'   => $this->telegramChatId,
                 ],
+                'on_print_start'     => $this->telegramOnStart,
                 'on_print_done'      => $this->telegramOnDone,
                 'on_print_failed'    => $this->telegramOnFailed,
                 'on_hms_error'       => $this->telegramOnHms,
@@ -170,6 +178,7 @@ class NotificationSettings extends Component
                     'password' => $this->mqttPassword,
                     'topic'    => $this->mqttTopic,
                 ],
+                'on_print_start'     => $this->mqttOnStart,
                 'on_print_done'      => $this->mqttOnDone,
                 'on_print_failed'    => $this->mqttOnFailed,
                 'on_hms_error'       => $this->mqttOnHms,

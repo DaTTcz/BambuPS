@@ -175,38 +175,6 @@ class MqttListenCommand extends Command
             }
         }
 
-	// Detekce změn stavu pro notifikace
-        $prevState = $printer->status['gcode_state'] ?? '';
-        $newState  = $status['gcode_state'] ?? '';
-        $prevHms   = $printer->status['hms'] ?? [];
-        $newHms    = $status['hms'] ?? [];
-
-        $notifier = new NotificationService($printer);
-
-        // Dokončení tisku
-        if ($prevState !== 'FINISH' && $newState === 'FINISH') {
-            $filename = $status['subtask_name'] ?? 'neznámý soubor';
-            $notifier->printDone($filename);
-        }
-
-        // Selhání tisku
-        if ($prevState !== 'FAILED' && $newState === 'FAILED') {
-            $filename = $status['subtask_name'] ?? 'neznámý soubor';
-            $notifier->printFailed($filename);
-        }
-
-        // HMS varování – nové chyby
-        if (!empty($newHms) && $newHms !== $prevHms) {
-            $notifier->hmsError($newHms);
-        }
-
-        // Konec filamentu
-        $prevAmsStatus = $printer->status['ams']['tray_now'] ?? null;
-        $newAmsStatus  = $status['ams']['tray_now'] ?? null;
-        if ($newAmsStatus === '255' && $prevAmsStatus !== '255') {
-            $notifier->filamentRunout();
-        }
-
         // Historie tisku - musí běžet PŘED uložením stavu (potřebuje předchozí
         // stav pro průběh/vrstvu při konci tisku). Chyba v historii nesmí
         // shodit listener.
@@ -223,6 +191,53 @@ class MqttListenCommand extends Command
             }
         } catch (\Throwable $e) {
             \Log::error('Mesh podložky: ' . $e->getMessage());
+        }
+
+	// Detekce změn stavu pro notifikace
+        $prevState = $printer->status['gcode_state'] ?? '';
+        $newState  = $status['gcode_state'] ?? '';
+        $prevHms   = $printer->status['hms'] ?? [];
+        $newHms    = $status['hms'] ?? [];
+
+        $notifier = new NotificationService($printer);
+
+        // Záznam tisku z historie (sync() výše ho už otevřel / uzavřel)
+        $lastJob = fn () => \App\Models\PrintJob::where('printer_id', $printer->id)
+            ->where('status', '!=', \App\Models\PrintJob::STATUS_QUEUED)
+            ->latest('id')->first();
+
+        // Začátek tisku - až skutečný tisk (RUNNING), ne příprava/kalibrace;
+        // návrat z pauzy se nepočítá. Jednou za tisk (cache podle id záznamu).
+        if ($newState === 'RUNNING' && !in_array($prevState, ['RUNNING', 'PAUSE'], true)) {
+            $job = $lastJob();
+            if ($job && $job->status === \App\Models\PrintJob::STATUS_RUNNING
+                && \Illuminate\Support\Facades\Cache::add('bambups:start_notified:' . $job->id, 1, now()->addDays(3))) {
+                $notifier->printStarted($job, $status);
+            }
+        }
+
+        // Dokončení tisku
+        if ($prevState !== 'FINISH' && $newState === 'FINISH') {
+            $filename = $status['subtask_name'] ?? 'neznámý soubor';
+            $notifier->printDone($filename, $lastJob());
+        }
+
+        // Selhání / zrušení tisku
+        if ($prevState !== 'FAILED' && $newState === 'FAILED') {
+            $filename = $status['subtask_name'] ?? 'neznámý soubor';
+            $notifier->printFailed($filename, $lastJob());
+        }
+
+        // HMS varování – nové chyby
+        if (!empty($newHms) && $newHms !== $prevHms) {
+            $notifier->hmsError($newHms);
+        }
+
+        // Konec filamentu
+        $prevAmsStatus = $printer->status['ams']['tray_now'] ?? null;
+        $newAmsStatus  = $status['ams']['tray_now'] ?? null;
+        if ($newAmsStatus === '255' && $prevAmsStatus !== '255') {
+            $notifier->filamentRunout();
         }
 
         $printer->update([

@@ -198,10 +198,16 @@ class PrintHistoryService
         $remainingMin = $status['mc_remaining_time'] ?? null;
         $percent      = (int) ($status['mc_percent'] ?? 0);
 
+        // Soubor stejného jména v appce (např. nahraný přes slicer connector)
+        $name = $status['subtask_name'] ?? 'Neznámý tisk';
+        $file = File::whereIn('original_name', [$name . '.gcode.3mf', $name . '.3mf', $name . '.gcode', $name])
+            ->latest('id')->first();
+
         PrintJob::create([
             'printer_id'        => $printer->id,
+            'file_id'           => $file?->id,
             'printer_name'      => $printer->name,
-            'name'              => $status['subtask_name'] ?? 'Neznámý tisk',
+            'name'              => $name,
             'source'            => 'external',
             'task_id'           => $taskId !== '' ? $taskId : null,
             'status'            => PrintJob::STATUS_RUNNING,
