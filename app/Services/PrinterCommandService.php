@@ -10,6 +10,9 @@ class PrinterCommandService
 {
     private Printer $printer;
 
+    /** task_id posledního odeslaného tisku (startPrint) - pro historii tisku */
+    public ?string $lastTaskId = null;
+
     public function __construct(Printer $printer)
     {
         $this->printer = $printer;
@@ -60,6 +63,7 @@ class PrinterCommandService
         // příkazy způsobuje, že tiskárna bere opakovaný tisk jako pokračování
         // předchozí (často FAILED) úlohy. Bambu Studio posílá vždy čerstvé ID.
         $submissionId = (string) ((int) (microtime(true) * 1000) % 2147483647 ?: 1);
+        $this->lastTaskId = $submissionId;
 
         $payload = [
             'print' => [

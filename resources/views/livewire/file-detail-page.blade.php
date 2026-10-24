@@ -223,6 +223,63 @@
         </div>
     @endif
 
+    {{-- Historie tisku tohoto souboru --}}
+    @php $ph = $this->printHistory; @endphp
+    <div class="bg-white dark:bg-bambu-dark-2 border border-gray-200 dark:border-bambu-dark-4 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 flex items-center justify-between gap-3 border-b border-gray-100 dark:border-bambu-dark-4">
+            <div class="flex items-center flex-wrap gap-x-3 gap-y-1">
+                <h3 class="text-sm font-semibold text-gray-800 dark:text-bambu-text">🕘 Historie tisku</h3>
+                @if($ph['total'] > 0)
+                    <span class="text-xs text-gray-500 dark:text-bambu-text-dim">
+                        Vytištěno <strong class="text-gray-700 dark:text-bambu-text">{{ $ph['total'] }}×</strong>
+                        – ✅ {{ $ph['finished'] }} · ❌ {{ $ph['failed'] }} · ⏹ {{ $ph['cancelled'] }}
+                        @if($ph['running'] > 0) · <span class="text-blue-600 dark:text-blue-300">● právě se tiskne</span>@endif
+                    </span>
+                @endif
+            </div>
+            @if($ph['total'] > 5)
+                <a href="{{ route('history', ['soubor' => $file->id, 'obdobi' => 'all']) }}"
+                    class="text-xs font-medium text-green-700 dark:text-bambu-green hover:underline shrink-0">Zobrazit vše →</a>
+            @endif
+        </div>
+
+        @if($ph['total'] === 0)
+            <p class="px-4 py-4 text-sm text-gray-400 dark:text-bambu-text-dim">Tenhle soubor se zatím netiskl.</p>
+        @else
+            <div class="divide-y divide-gray-100 dark:divide-bambu-dark-4">
+                @foreach($ph['recent'] as $job)
+                    @php
+                        $badge = match ($job->status) {
+                            'finished'  => 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-bambu-green',
+                            'failed'    => 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+                            'running'   => 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+                            default     => 'bg-gray-100 dark:bg-bambu-dark-3 text-gray-600 dark:text-bambu-text-dim',
+                        };
+                    @endphp
+                    <div wire:key="fph-{{ $job->id }}" class="px-4 py-2 flex items-center gap-3 text-xs">
+                        @if($job->snapshot_path)
+                            <a href="{{ route('history.snapshot', $job->id) }}" target="_blank" class="w-10 h-8 shrink-0 rounded overflow-hidden bg-gray-100 dark:bg-bambu-dark-3">
+                                <img src="{{ route('history.snapshot', $job->id) }}" loading="lazy" class="w-full h-full object-cover" alt="snímek">
+                            </a>
+                        @else
+                            <span class="w-10 h-8 shrink-0 rounded bg-gray-100 dark:bg-bambu-dark-3 flex items-center justify-center">🖨️</span>
+                        @endif
+                        <span class="text-gray-700 dark:text-bambu-text w-28 shrink-0">{{ $job->started_at?->format('d.m.Y H:i') ?? '–' }}</span>
+                        <span class="text-gray-500 dark:text-bambu-text-dim truncate flex-1">
+                            {{ $job->printer?->name ?? $job->printer_name ?? '–' }}
+                            @if($job->plate_index && count($plates) > 1) · deska {{ $job->plate_index }} @endif
+                        </span>
+                        <span class="text-gray-500 dark:text-bambu-text-dim shrink-0 hidden sm:inline">
+                            ⏱ {{ \App\Models\PrintJob::formatSeconds($job->duration) }}
+                            @if($job->status !== 'finished' && $job->progress !== null) · {{ $job->progress }} % @endif
+                        </span>
+                        <span class="shrink-0 px-2 py-0.5 rounded-full font-medium {{ $badge }}">{{ $job->status_label }}</span>
+                    </div>
+                @endforeach
+            </div>
+        @endif
+    </div>
+
     {{-- Dialog tisku --}}
     @if($showPrintDialog && $dialogPrinter)
         <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

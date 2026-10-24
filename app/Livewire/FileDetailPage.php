@@ -3,9 +3,11 @@
 namespace App\Livewire;
 
 use App\Models\File;
+use App\Models\PrintJob;
 use App\Models\Printer;
 use App\Services\BambuFtpService;
 use App\Services\PrinterCommandService;
+use App\Services\PrintHistoryService;
 use Livewire\Component;
 
 class FileDetailPage extends Component
@@ -270,6 +272,14 @@ class FileDetailPage extends Component
             );
 
 	    if ($started) {
+                // Záznam do historie - MQTT listener ho podle task_id spáruje,
+                // jakmile se tisk na tiskárně opravdu rozběhne.
+                try {
+                    PrintHistoryService::queue($printer, $this->file, $this->selectedPlate, $cmd->lastTaskId, auth()->id());
+                } catch (\Throwable $e) {
+                    \Log::error('Historie tisku (queue): ' . $e->getMessage());
+                }
+
                 $this->dispatch('toast', type: 'success',
                     message: '🖨 Tisk spuštěn na ' . $printer->name);
                 $this->redirect(route('printer.detail', $printer->id));
@@ -294,6 +304,29 @@ class FileDetailPage extends Component
             'printers'      => $printers,
             'dialogPrinter' => $printer,
         ]);
+    }
+
+    /** Souhrn tisků tohoto souboru + posledních 5 záznamů */
+    public function getPrintHistoryProperty(): array
+    {
+        $base = PrintJob::where('file_id', $this->file->id)
+            ->where('status', '!=', PrintJob::STATUS_QUEUED);
+
+        $counts = (clone $base)
+            ->selectRaw('status, COUNT(*) as cnt')
+            ->groupBy('status')
+            ->pluck('cnt', 'status');
+
+        return [
+            'total'     => (int) $counts->sum(),
+            'finished'  => (int) ($counts[PrintJob::STATUS_FINISHED] ?? 0),
+            'failed'    => (int) ($counts[PrintJob::STATUS_FAILED] ?? 0),
+            'cancelled' => (int) ($counts[PrintJob::STATUS_CANCELLED] ?? 0),
+            'running'   => (int) ($counts[PrintJob::STATUS_RUNNING] ?? 0),
+            'recent'    => (clone $base)->with('printer')
+                ->orderByDesc('started_at')->orderByDesc('id')
+                ->limit(5)->get(),
+        ];
     }
 
     public function getAllFoldersProperty()

@@ -2,6 +2,7 @@
 
 use App\Models\File;
 use App\Models\Printer;
+use App\Models\PrintJob;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
@@ -40,6 +41,20 @@ Route::middleware([
     Route::get('/printers', function () {
         return view('printers-overview');
     })->name('printers');
+
+    Route::get('/history', function () {
+        return view('history');
+    })->name('history');
+
+    // Snímek z kamery uložený na konci tisku
+    Route::get('/history/{job}/snapshot', function (PrintJob $job) {
+        if (!$job->snapshot_path || !Storage::disk('local')->exists($job->snapshot_path)) {
+            abort(404);
+        }
+        return response(Storage::disk('local')->get($job->snapshot_path))
+            ->header('Content-Type', 'image/jpeg')
+            ->header('Cache-Control', 'private, max-age=86400');
+    })->name('history.snapshot');
 
     Route::get('/settings/printers', function () {
         return view('printers');

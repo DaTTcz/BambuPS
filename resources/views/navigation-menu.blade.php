@@ -22,6 +22,7 @@
                     {!! $navLink('dashboard', 'Dashboard') !!}
                     {!! $navLink('printers', '🖨️ Tiskárny', 'printers*') !!}
                     {!! $navLink('files', '📁 Soubory', 'files*') !!}
+                    {!! $navLink('history', '🕘 Historie', 'history*') !!}
 
                     {{-- Nastavení dropdown --}}
                     <div class="relative">
@@ -131,6 +132,7 @@
         <a href="{{ route('dashboard') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">Dashboard</a>
             <a href="{{ route('printers') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">🖨️ Tiskárny</a>
             <a href="{{ route('files') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">📁 Soubory</a>
+            <a href="{{ route('history') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">🕘 Historie</a>
             <a href="{{ route('printers.manage') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">⚙️ Správa tiskáren</a>
             <a href="{{ route('notifications.settings') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">🔔 Notifikace</a>
             <a href="{{ route('modules.settings') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">🧩 Moduly</a>

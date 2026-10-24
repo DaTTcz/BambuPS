@@ -7,6 +7,7 @@ use App\Models\Printer;
 use App\Services\BambuMqttService;
 use Illuminate\Console\Command;
 use App\Services\NotificationService;
+use App\Services\PrintHistoryService;
 use App\Services\HmsService;
 use Carbon\Carbon;
 
@@ -195,6 +196,15 @@ class MqttListenCommand extends Command
         $newAmsStatus  = $status['ams']['tray_now'] ?? null;
         if ($newAmsStatus === '255' && $prevAmsStatus !== '255') {
             $notifier->filamentRunout();
+        }
+
+        // Historie tisku - musí běžet PŘED uložením stavu (potřebuje předchozí
+        // stav pro průběh/vrstvu při konci tisku). Chyba v historii nesmí
+        // shodit listener.
+        try {
+            (new PrintHistoryService())->sync($printer, $printer->status ?? [], $status);
+        } catch (\Throwable $e) {
+            \Log::error('Historie tisku: ' . $e->getMessage());
         }
 
         $printer->update([
