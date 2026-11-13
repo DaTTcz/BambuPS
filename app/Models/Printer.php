@@ -69,6 +69,59 @@ class Printer extends Model
         return null;
     }
 
+    /** print.stg_cur - fáze, kdy je tisk zastavený kvůli konci filamentu */
+    public const STAGE_FILAMENT_RUNOUT = 6;
+
+    /** Fáze tisku Bambu (print.stg_cur) */
+    public const STAGES = [
+        1  => '📐 Vyrovnávání podložky',
+        2  => '🔥 Ohřev podložky',
+        3  => '🔧 Kalibrace os',
+        4  => '🔄 Výměna filamentu',
+        5  => '⏸ Pauza (M400)',
+        6  => '🧵 Pauza – došel filament',
+        7  => '🔥 Ohřev trysky',
+        8  => '🔧 Kalibrace extruze',
+        9  => '🔍 Skenování podložky',
+        10 => '🔍 Kontrola první vrstvy',
+        11 => '🔍 Rozpoznávání podložky',
+        12 => '🔧 Kalibrace lidaru',
+        13 => '🏠 Najíždění na nulu',
+        14 => '🧹 Čištění trysky',
+        15 => '🌡️ Kontrola teploty extruderu',
+        16 => '⏸ Pozastaveno uživatelem',
+        17 => '⏸ Pauza – spadl přední kryt',
+        18 => '🔧 Kalibrace lidaru',
+        19 => '🔧 Kalibrace průtoku',
+        20 => '⚠️ Pauza – chyba teploty trysky',
+        21 => '⚠️ Pauza – chyba teploty podložky',
+        22 => '🔄 Vysouvání filamentu',
+        23 => '⏸ Pauza – přeskočení kroku',
+        24 => '🔄 Zavádění filamentu',
+        25 => '🔧 Kalibrace hluku motorů',
+        26 => '⚠️ Pauza – ztráta spojení s AMS',
+        27 => '⚠️ Pauza – nízké otáčky ventilátoru',
+        28 => '⚠️ Pauza – chyba teploty komory',
+        29 => '❄️ Chlazení komory',
+        30 => '⏸ Pauza – G-code uživatele',
+        32 => '⚠️ Pauza – zakrytá tryska',
+        33 => '⚠️ Pauza – chyba odstřihu filamentu',
+        34 => '⚠️ Pauza – chyba první vrstvy',
+        35 => '⚠️ Pauza – ucpaná tryska',
+    ];
+
+    /**
+     * Co tiskárna právě dělá v rámci tisku (výměna filamentu, ohřev, ...).
+     * Null, když netiskne nebo prostě tiskne (fáze 0).
+     */
+    public function getStageLabelAttribute(): ?string
+    {
+        if (!in_array($this->status['gcode_state'] ?? '', ['RUNNING', 'PAUSE', 'PREPARE'], true)) {
+            return null;
+        }
+        return self::STAGES[(int) ($this->status['stg_cur'] ?? -1)] ?? null;
+    }
+
     public function getStatusTextAttribute(): string
     {
         if (!Module::isEnabled('mqtt_connector')) {

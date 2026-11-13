@@ -120,6 +120,8 @@ class MqttListenCommand extends Command
             if (isset($print['wifi_signal']))            $status['wifi_signal']            = $print['wifi_signal'];
             if (isset($print['spd_mag']))                $status['spd_mag']                = $print['spd_mag'];
             if (isset($print['spd_lvl']))                $status['spd_lvl']                = $print['spd_lvl'];
+            // Fáze tisku (4 = výměna filamentu, 6 = pauza kvůli konci filamentu, ...)
+            if (isset($print['stg_cur']))                $status['stg_cur']                = (int) $print['stg_cur'];
 
             if (isset($print['nozzle_temper']) || isset($print['bed_temper'])) {
                 $status['temperatures'] = array_merge($status['temperatures'] ?? [], [
@@ -234,10 +236,24 @@ class MqttListenCommand extends Command
         }
 
         // Konec filamentu
-        $prevAmsStatus = $printer->status['ams']['tray_now'] ?? null;
-        $newAmsStatus  = $status['ams']['tray_now'] ?? null;
-        if ($newAmsStatus === '255' && $prevAmsStatus !== '255') {
+        // Pozor: tray_now = 255 neznamená konec filamentu - AMS tak hlásí
+        // vysunutý filament při KAŽDÉ výměně (vysunout -> 255 -> zavést další).
+        // Skutečný konec poznáme podle fáze "pauza kvůli konci filamentu"
+        // nebo podle chyby tisku typu xxxx8011 (Filament has run out).
+        // Pokud má AMS záložní cívku, tiskárna se nezastaví a nic nehlásí.
+        $prevStage  = (int) ($printer->status['stg_cur'] ?? -1);
+        $newStage   = (int) ($status['stg_cur'] ?? -1);
+        $prevErr    = (int) ($printer->status['print_error'] ?? 0);
+        $newErr     = (int) ($status['print_error'] ?? 0);
+        $isRunout   = fn (int $err) => $err > 0 && ($err & 0xFFFF) === 0x8011;
+        $runoutNow  = ($newStage === \App\Models\Printer::STAGE_FILAMENT_RUNOUT && $prevStage !== \App\Models\Printer::STAGE_FILAMENT_RUNOUT)
+            || ($isRunout($newErr) && $newErr !== $prevErr);
+        if ($runoutNow && \Illuminate\Support\Facades\Cache::add('bambups:runout_notified:' . $printer->id, 1, now()->addMinutes(10))) {
             $notifier->filamentRunout();
+        }
+        // Po vyřešení (tisk zase běží) může přijít další konec filamentu
+        if ($newStage === 0 && $newState === 'RUNNING' && !$isRunout($newErr)) {
+            \Illuminate\Support\Facades\Cache::forget('bambups:runout_notified:' . $printer->id);
         }
 
         $printer->update([

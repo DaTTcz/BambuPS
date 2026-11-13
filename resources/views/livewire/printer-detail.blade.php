@@ -157,6 +157,9 @@
                                 @default bg-gray-100 text-gray-600
                             @endswitch
                         ">{{ $printer->status_text }}</span>
+                        @if($printer->stage_label)
+                            <p class="text-xs text-gray-500 dark:text-bambu-text-dim mt-1 whitespace-nowrap">{{ $printer->stage_label }}</p>
+                        @endif
                     </div>
                     @if(!empty($printer->status['wifi_signal']))
                         <div class="text-center">
