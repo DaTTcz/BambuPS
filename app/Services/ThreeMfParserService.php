@@ -28,6 +28,12 @@ class ThreeMfParserService
 
         // Náhled první podložky
         $thumbnail = $zip->getFromName('Metadata/plate_1.png');
+        if ($thumbnail === false) {
+            // Projekt bez náhledu první desky - vzít první dostupný
+            for ($i = 2; $i <= 36 && $thumbnail === false; $i++) {
+                $thumbnail = $zip->getFromName("Metadata/plate_{$i}.png");
+            }
+        }
         if ($thumbnail !== false) {
             $metadata['thumbnail_data'] = base64_encode($thumbnail);
         }
@@ -132,22 +138,79 @@ class ThreeMfParserService
             }
         }
 
-        // Pokud nemáme žádné plates z slice_info
+        // Pokud nemáme žádné plates z slice_info - typicky projekt (.3mf) bez
+        // naslicovaného G-code. Desky skládáme z model_settings.config
+        // (plater_id - spolehlivý seznam všech desek), plate_N.json a plate_N.png.
         if (empty($plates)) {
-            for ($i = 1; $i <= $plateCount; $i++) {
-                $plateJson = $zip->getFromName("Metadata/plate_{$i}.json");
-                if ($plateJson) {
-                    $pData = @json_decode($plateJson, true);
-                    if ($pData) {
-                        $plates[] = [
-                            'index'          => $i,
-                            'bed_type'       => $pData['bed_type'] ?? null,
-                            'nozzle_diameter'=> $pData['nozzle_diameter'] ?? null,
-                            'layer_height'   => round($pData['bbox_objects'][0]['layer_height'] ?? 0, 2) ?: null,
-                            'has_gcode'      => false,
-                        ];
+            $indices    = [];
+            $thumbFiles = [];
+            $plateNames = [];
+
+            $modelSettings = $zip->getFromName('Metadata/model_settings.config');
+            if ($modelSettings !== false) {
+                $msXml = @simplexml_load_string($modelSettings);
+                if ($msXml && isset($msXml->plate)) {
+                    foreach ($msXml->plate as $p) {
+                        $pid = null; $thumb = null; $pname = null;
+                        foreach ($p->metadata as $item) {
+                            $k = (string) $item['key'];
+                            if ($k === 'plater_id')      $pid   = (int) $item['value'];
+                            if ($k === 'thumbnail_file') $thumb = (string) $item['value'];
+                            if ($k === 'plater_name')    $pname = trim((string) $item['value']);
+                        }
+                        if ($pid) {
+                            $indices[$pid] = true;
+                            if ($thumb) $thumbFiles[$pid] = $thumb;
+                            if ($pname) $plateNames[$pid] = $pname;
+                        }
                     }
                 }
+            }
+            for ($i = 1; $i <= 36; $i++) {
+                if ($zip->locateName("Metadata/plate_{$i}.json") !== false
+                    || $zip->locateName("Metadata/plate_{$i}.png") !== false) {
+                    $indices[$i] = true;
+                }
+            }
+            ksort($indices);
+
+            foreach (array_keys($indices) as $i) {
+                $plateData = [
+                    'index'     => $i,
+                    'has_gcode' => $zip->locateName("Metadata/plate_{$i}.gcode") !== false,
+                ];
+                if (!empty($plateNames[$i])) {
+                    $plateData['name'] = $plateNames[$i];
+                }
+
+                $plateJson = $zip->getFromName("Metadata/plate_{$i}.json");
+                $pData     = $plateJson ? @json_decode($plateJson, true) : null;
+                if ($pData) {
+                    $plateData['bed_type'] = $pData['bed_type'] ?? null;
+                    // Hodnoty jsou float32 (0.40000000596046) - zaokrouhlit
+                    if (isset($pData['nozzle_diameter'])) {
+                        $plateData['nozzle_diameter'] = (string) round((float) $pData['nozzle_diameter'], 2);
+                    }
+                    $lh = $pData['bbox_objects'][0]['layer_height'] ?? null;
+                    if ($lh) {
+                        $plateData['layer_height'] = round((float) $lh, 2);
+                    }
+                    $objects = array_values(array_unique(array_filter(array_column($pData['bbox_objects'] ?? [], 'name'))));
+                    if ($objects) {
+                        $plateData['objects'] = $objects;
+                    }
+                }
+
+                $thumbName  = $thumbFiles[$i] ?? "Metadata/plate_{$i}.png";
+                $plateThumb = $zip->getFromName($thumbName);
+                if ($plateThumb === false && $thumbName !== "Metadata/plate_{$i}.png") {
+                    $plateThumb = $zip->getFromName("Metadata/plate_{$i}.png");
+                }
+                if ($plateThumb !== false) {
+                    $plateData['thumbnail_data'] = base64_encode($plateThumb);
+                }
+
+                $plates[] = array_filter($plateData, fn ($v) => $v !== null && $v !== '');
             }
         }
 

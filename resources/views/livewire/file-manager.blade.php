@@ -292,7 +292,7 @@
             x-on:livewire-upload-progress="progress = $event.detail.progress">
             <div class="bg-white dark:bg-bambu-dark-2 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-100 dark:border-bambu-dark-4">
                 <h3 class="text-lg font-semibold text-gray-800 dark:text-bambu-text mb-4">⬆ Nahrát soubory</h3>
-                <input wire:model="uploadedFiles" type="file" multiple accept=".3mf,.gcode"
+                <input wire:model="uploadedFiles" type="file" multiple accept=".3mf,.gcode,.bgcode"
                     class="w-full text-sm text-gray-500 dark:text-bambu-text-dim mb-4">
 
                 {{-- Progress bar - fáze 1: přenos souboru do prohlížeče/na server --}}

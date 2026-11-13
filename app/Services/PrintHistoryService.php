@@ -30,7 +30,7 @@ class PrintHistoryService
     /** Poslední zpracovaný [stav, task_id] na tiskárnu - drží se v paměti listeneru */
     private static array $lastSeen = [];
 
-    public static function queue(Printer $printer, File $file, int $plateIndex, ?string $taskId, ?int $userId, ?string $bedType = null, ?int $bedTemp = null): PrintJob
+    public static function queue(Printer $printer, File $file, int $plateIndex, ?string $taskId, ?int $userId): PrintJob
     {
         $plates = $file->metadata['plates'] ?? [];
         $plate  = collect($plates)->firstWhere('index', $plateIndex) ?? [];
@@ -52,8 +52,6 @@ class PrintHistoryService
             'user_id'           => $userId,
             'name'              => pathinfo($file->original_name, PATHINFO_FILENAME),
             'plate_index'       => $plateIndex,
-            'bed_type'          => $bedType,
-            'bed_temp'          => $bedTemp,
             'source'            => 'bambups',
             'estimated_seconds' => $estimated ? (int) $estimated : null,
             'total_layers'      => $plate['total_layer_num'] ?? null,
@@ -198,16 +196,10 @@ class PrintHistoryService
         $remainingMin = $status['mc_remaining_time'] ?? null;
         $percent      = (int) ($status['mc_percent'] ?? 0);
 
-        // Soubor stejného jména v appce (např. nahraný přes slicer connector)
-        $name = $status['subtask_name'] ?? 'Neznámý tisk';
-        $file = File::whereIn('original_name', [$name . '.gcode.3mf', $name . '.3mf', $name . '.gcode', $name])
-            ->latest('id')->first();
-
         PrintJob::create([
             'printer_id'        => $printer->id,
-            'file_id'           => $file?->id,
             'printer_name'      => $printer->name,
-            'name'              => $name,
+            'name'              => $status['subtask_name'] ?? 'Neznámý tisk',
             'source'            => 'external',
             'task_id'           => $taskId !== '' ? $taskId : null,
             'status'            => PrintJob::STATUS_RUNNING,

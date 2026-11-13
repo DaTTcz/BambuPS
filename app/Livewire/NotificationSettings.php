@@ -3,6 +3,8 @@
 namespace App\Livewire;
 
 use App\Models\NotificationSetting;
+use App\Services\NotificationService;
+use App\Services\NotificationTemplates;
 use Livewire\Component;
 use App\Models\AppSetting;
 
@@ -48,6 +50,13 @@ class NotificationSettings extends Component
     public bool $mqttOnFailed       = true;
     public bool $mqttOnHms          = true;
     public bool $mqttOnFilament     = true;
+
+    // Editor šablony (otevřený = $editEvent není null)
+    public ?string $editChannel = null;
+    public ?string $editEvent   = null;
+    public string $editBody     = '';
+    public string $editSubject  = '';
+    public bool $editImage      = false;
 
     public function mount(): void
     {
@@ -103,18 +112,7 @@ class NotificationSettings extends Component
             'emailAddress' => 'required_if:emailEnabled,true|email|nullable',
         ]);
 
-        NotificationSetting::updateOrCreate(
-            ['user_id' => auth()->id(), 'channel' => 'email'],
-            [
-                'enabled'            => $this->emailEnabled,
-                'config'             => ['address' => $this->emailAddress],
-                'on_print_start'     => $this->emailOnStart,
-                'on_print_done'      => $this->emailOnDone,
-                'on_print_failed'    => $this->emailOnFailed,
-                'on_hms_error'       => $this->emailOnHms,
-                'on_filament_runout' => $this->emailOnFilament,
-            ]
-        );
+        $this->persistChannel('email');
         $this->dispatch('toast', type: 'success', message: 'Email notifikace uloženy');
     }
 
@@ -147,45 +145,201 @@ class NotificationSettings extends Component
 
     public function saveTelegram(): void
     {
-        NotificationSetting::updateOrCreate(
-            ['user_id' => auth()->id(), 'channel' => 'telegram'],
-            [
-                'enabled'            => $this->telegramEnabled,
-                'config'             => [
-                    'bot_token' => $this->telegramBotToken,
-                    'chat_id'   => $this->telegramChatId,
-                ],
-                'on_print_start'     => $this->telegramOnStart,
-                'on_print_done'      => $this->telegramOnDone,
-                'on_print_failed'    => $this->telegramOnFailed,
-                'on_hms_error'       => $this->telegramOnHms,
-                'on_filament_runout' => $this->telegramOnFilament,
-            ]
-        );
+        $this->persistChannel('telegram');
         $this->dispatch('toast', type: 'success', message: 'Telegram notifikace uloženy');
     }
 
     public function saveMqtt(): void
     {
-        NotificationSetting::updateOrCreate(
-            ['user_id' => auth()->id(), 'channel' => 'mqtt'],
-            [
-                'enabled'            => $this->mqttEnabled,
-                'config'             => [
-                    'host'     => $this->mqttHost,
-                    'port'     => $this->mqttPort,
-                    'username' => $this->mqttUsername,
-                    'password' => $this->mqttPassword,
-                    'topic'    => $this->mqttTopic,
-                ],
-                'on_print_start'     => $this->mqttOnStart,
-                'on_print_done'      => $this->mqttOnDone,
-                'on_print_failed'    => $this->mqttOnFailed,
-                'on_hms_error'       => $this->mqttOnHms,
-                'on_filament_runout' => $this->mqttOnFilament,
-            ]
-        );
+        $this->persistChannel('mqtt');
         $this->dispatch('toast', type: 'success', message: 'MQTT notifikace uloženy');
+    }
+
+    /** Přihlašovací údaje kanálu z formuláře */
+    private function channelConfig(string $channel): array
+    {
+        return match ($channel) {
+            'email'    => ['address' => $this->emailAddress],
+            'telegram' => ['bot_token' => $this->telegramBotToken, 'chat_id' => $this->telegramChatId],
+            'mqtt'     => [
+                'host'     => $this->mqttHost,
+                'port'     => $this->mqttPort,
+                'username' => $this->mqttUsername,
+                'password' => $this->mqttPassword,
+                'topic'    => $this->mqttTopic,
+            ],
+        };
+    }
+
+    private function setting(string $channel): ?NotificationSetting
+    {
+        return NotificationSetting::where('user_id', auth()->id())->where('channel', $channel)->first();
+    }
+
+    /** Uloží kanál - config se slučuje, takže vlastní šablony zůstanou */
+    private function persistChannel(string $channel): NotificationSetting
+    {
+        $setting = NotificationSetting::firstOrNew(['user_id' => auth()->id(), 'channel' => $channel]);
+
+        $attrs = [
+            'enabled' => $this->{$channel . 'Enabled'},
+            'config'  => array_merge($setting->config ?? [], $this->channelConfig($channel)),
+        ];
+        foreach (NotificationTemplates::EVENTS as $ev) {
+            $attrs[$ev['trigger']] = $this->{$channel . $ev['suffix']};
+        }
+
+        $setting->fill($attrs)->save();
+        return $setting;
+    }
+
+    /**
+     * Přepínač u události se uloží hned (když už kanál v DB existuje),
+     * není potřeba mačkat Uložit.
+     */
+    public function updated(string $property): void
+    {
+        if (!preg_match('/^(email|telegram|mqtt)(On[A-Z][a-z]+)$/', $property, $m)) {
+            return;
+        }
+        $ev = collect(NotificationTemplates::EVENTS)->firstWhere('suffix', $m[2]);
+        $setting = $ev ? $this->setting($m[1]) : null;
+        if ($setting) {
+            $setting->update([$ev['trigger'] => $this->{$property}]);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Editor šablon
+    // ------------------------------------------------------------------
+
+    /** [kanál => [událost => true]] - které šablony jsou upravené */
+    public function getCustomTemplatesProperty(): array
+    {
+        return NotificationSetting::where('user_id', auth()->id())->get()
+            ->mapWithKeys(fn ($s) => [$s->channel => array_map(fn () => true, $s->config['templates'] ?? [])])
+            ->all();
+    }
+
+    public function openTemplate(string $channel, string $event): void
+    {
+        if (!in_array($channel, NotificationTemplates::CHANNELS, true) || !isset(NotificationTemplates::EVENTS[$event])) {
+            return;
+        }
+        $tpl = NotificationTemplates::forChannel($this->setting($channel)?->config, $event);
+
+        $this->editChannel = $channel;
+        $this->editEvent   = $event;
+        $this->editBody    = $tpl['body'];
+        $this->editSubject = $tpl['subject'];
+        $this->editImage   = $tpl['image'];
+        $this->resetErrorBag();
+    }
+
+    public function closeTemplate(): void
+    {
+        $this->editChannel = $this->editEvent = null;
+    }
+
+    /** Vrátí do editoru výchozí šablonu (uloží se až tlačítkem Uložit) */
+    public function resetTemplate(): void
+    {
+        if (!$this->editEvent) {
+            return;
+        }
+        $def = NotificationTemplates::event($this->editEvent);
+        $this->editBody    = $def['body'];
+        $this->editSubject = $def['subject'];
+        $this->editImage   = $def['image'];
+    }
+
+    public function saveTemplate(): void
+    {
+        if (!$this->editChannel || !$this->editEvent) {
+            return;
+        }
+        $this->validate([
+            'editBody'    => 'required|string|max:3000',
+            'editSubject' => 'nullable|string|max:200',
+        ], [], ['editBody' => 'text zprávy', 'editSubject' => 'předmět']);
+
+        $def    = NotificationTemplates::event($this->editEvent);
+        $custom = ['body' => rtrim(str_replace("\r\n", "\n", $this->editBody))];
+        if ($this->editChannel === 'email') {
+            $custom['subject'] = trim($this->editSubject);
+        }
+        if ($this->editChannel !== 'mqtt') {
+            $custom['image'] = $this->editImage;
+        }
+
+        // Shoda s výchozí šablonou = žádná vlastní (pozdější úpravy výchozích textů se pak projeví)
+        $isDefault = $custom['body'] === $def['body']
+            && (!isset($custom['subject']) || $custom['subject'] === $def['subject'] || $custom['subject'] === '')
+            && (!isset($custom['image']) || $custom['image'] === $def['image']);
+
+        $setting = $this->setting($this->editChannel) ?? $this->persistChannel($this->editChannel);
+        $config  = $setting->config ?? [];
+        if ($isDefault) {
+            unset($config['templates'][$this->editEvent]);
+            if (empty($config['templates'])) {
+                unset($config['templates']);
+            }
+        } else {
+            $config['templates'][$this->editEvent] = $custom;
+        }
+        $setting->update(['config' => $config]);
+
+        $this->closeTemplate();
+        $this->dispatch('toast', type: 'success', message: $isDefault ? 'Použije se výchozí šablona' : 'Šablona uložena');
+    }
+
+    /** Pošle šablonu z editoru (i neuloženou) s ukázkovými daty */
+    public function testTemplate(): void
+    {
+        if (!$this->editChannel || !$this->editEvent) {
+            return;
+        }
+        $setting = new NotificationSetting([
+            'channel' => $this->editChannel,
+            'config'  => $this->channelConfig($this->editChannel),
+        ]);
+
+        try {
+            (new NotificationService())->sendTest($setting, $this->editEvent, [
+                'body'    => $this->editBody,
+                'subject' => $this->editSubject,
+                'image'   => $this->editChannel !== 'mqtt' && $this->editImage,
+            ]);
+            $this->dispatch('toast', type: 'success', message: 'Zkušební zpráva odeslána');
+        } catch (\Throwable $e) {
+            $this->dispatch('toast', type: 'error', message: 'Chyba: ' . $e->getMessage());
+        }
+    }
+
+    /** Náhled s ukázkovými daty: ['subject' => string, 'body' => html] */
+    public function getTemplatePreviewProperty(): ?array
+    {
+        if (!$this->editEvent) {
+            return null;
+        }
+        $vars = NotificationTemplates::SAMPLE;
+
+        if ($this->editChannel === 'telegram') {
+            $html = NotificationTemplates::render($this->editBody, $vars, true);
+            // Jen značky, které Telegram umí, a bez atributů
+            $html = strip_tags($html, '<b><strong><i><em><u><s><code><pre>');
+            $html = preg_replace('/<(\w+)\s[^>]*>/', '<$1>', $html);
+            $body = nl2br($html);
+        } else {
+            $body = nl2br(e(NotificationTemplates::render($this->editBody, $vars, false)));
+        }
+
+        return [
+            'subject' => $this->editChannel === 'email'
+                ? NotificationTemplates::render($this->editSubject, $vars, false)
+                : null,
+            'body'    => $body,
+        ];
     }
 
     public function testEmail(): void

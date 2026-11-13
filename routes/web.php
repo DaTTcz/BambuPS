@@ -84,17 +84,12 @@ Route::middleware([
     })->name('printer.detail');
 
     Route::get('/printers/{printer}/snapshot', function (Printer $printer) {
-        $response = Http::timeout(5)->get(
-            'http://127.0.0.1:1984/api/frame.jpeg?src=printer_' . $printer->id
-        );
+        $jpeg = $printer->fetchSnapshot();
+        abort_unless($jpeg, 404);
 
-        if ($response->successful()) {
-            return response($response->body())
-                ->header('Content-Type', 'image/jpeg')
-                ->header('Cache-Control', 'no-store');
-        }
-
-        abort(404);
+        return response($jpeg)
+            ->header('Content-Type', 'image/jpeg')
+            ->header('Cache-Control', 'no-store');
     })->name('printer.snapshot');
 
     Route::get('/printers/{printer}/stream', function (Printer $printer) {

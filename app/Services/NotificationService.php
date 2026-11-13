@@ -2,117 +2,175 @@
 
 namespace App\Services;
 
+use App\Models\AppSetting;
 use App\Models\NotificationSetting;
 use App\Models\PrintJob;
 use App\Models\Printer;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use App\Models\AppSetting;
+use Illuminate\Support\Facades\Storage;
 
+/**
+ * Odesílání notifikací. Text, předmět a přiložení obrázku si každý kanál
+ * bere ze své šablony (viz NotificationTemplates), události jen připraví
+ * proměnné.
+ */
 class NotificationService
 {
-    public function __construct(private Printer $printer) {}
+    public function __construct(private ?Printer $printer = null) {}
 
-    /**
-     * Začátek tisku - s náhledem desky a detaily ze souboru (pokud ho známe).
-     */
+    // ------------------------------------------------------------------
+    // Události
+    // ------------------------------------------------------------------
+
+    /** Začátek tisku - s náhledem desky a detaily ze souboru (pokud ho známe). */
     public function printStarted(PrintJob $job, array $status): void
     {
-        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
-        $lines = ["🖨️ <b>Tisk začal</b> na {$e($this->printer->name)}"];
-
-        $name = $e($job->name);
-        if ($job->plate_index && ($job->file?->metadata['plate_count'] ?? 1) > 1) {
-            $name .= " (deska {$job->plate_index})";
-        }
-        $lines[] = "📄 {$name}";
-
-        // Odhad času: zbývající čas z tiskárny je přesnější než odhad slicéru
+        // Zbývající čas z tiskárny je přesnější než odhad slicéru
         $remainingMin = (int) ($status['mc_remaining_time'] ?? 0);
         $seconds      = $remainingMin > 0 ? $remainingMin * 60 : $job->estimated_seconds;
+
+        $eta = '';
         if ($seconds) {
-            $lines[] = '⏱ ' . PrintJob::formatSeconds($seconds)
-                . ' · hotovo kolem ' . now()->addSeconds($seconds)->format('H:i')
-                . (now()->addSeconds($seconds)->isToday() ? '' : ' (' . now()->addSeconds($seconds)->format('d.m.') . ')');
-        }
-
-        if ($job->filament_g) {
-            $types = collect($job->filaments ?? [])->pluck('type')->filter()->unique()->implode(', ');
-            $lines[] = '🧵 ' . number_format($job->filament_g, 1, ',', ' ') . ' g' . ($types ? " {$e($types)}" : '');
-        }
-
-        $bed = array_filter([
-            $job->bed_type ? $e($job->bed_type) : null,
-            $job->bed_temp ? "{$job->bed_temp} °C" : null,
-        ]);
-        if ($bed) {
-            $lines[] = '🛏️ ' . implode(' · ', $bed);
+            $end = now()->addSeconds($seconds);
+            $eta = $end->format('H:i') . ($end->isToday() ? '' : ' (' . $end->format('d.m.') . ')');
         }
 
         $layers = $job->total_layers ?? ($status['total_layer_num'] ?? null);
         $lh     = $job->file?->metadata['layer_height'] ?? null;
-        if ($layers || $lh) {
-            $lines[] = '📐 ' . implode(' · ', array_filter([
+
+        $vars = [
+            'file'      => $job->name,
+            'plate'     => $this->plateLabel($job),
+            'estimated' => $seconds ? PrintJob::formatSeconds($seconds) : '',
+            'eta'       => $eta,
+            'filament'  => $this->filamentLabel($job),
+            'bed'       => implode(' · ', array_filter([
+                $job->bed_type,
+                $job->bed_temp ? "{$job->bed_temp} °C" : null,
+            ])),
+            'layers'    => implode(' · ', array_filter([
                 $layers ? "{$layers} vrstev" : null,
                 $lh ? "{$lh} mm" : null,
-            ]));
-        }
+            ])),
+        ];
 
-        $this->send('on_print_start', [
-            'event'     => 'print_start',
-            'printer'   => $this->printer->name,
-            'file'      => $job->name,
-            'plate'     => $job->plate_index,
+        $this->dispatchEvent('print_start', $vars, [
+            'file'              => $job->name,
+            'plate'             => $job->plate_index,
             'estimated_seconds' => $seconds,
-            'filament_g' => $job->filament_g,
-            'message'   => implode("\n", $lines),
-            '_image'    => $this->jobThumbnailPath($job),
-        ]);
+            'filament_g'        => $job->filament_g,
+        ], $this->jobThumbnailPath($job));
     }
 
     public function printDone(string $filename, ?PrintJob $job = null): void
     {
-        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
-        $lines = ["✅ <b>Tisk dokončen</b> na {$e($this->printer->name)}", "📄 {$e($job?->name ?? $filename)}"];
-        if ($job?->duration_seconds) {
-            $lines[] = '⏱ ' . PrintJob::formatSeconds($job->duration_seconds)
-                . ($job->estimated_seconds ? ' (odhad ' . PrintJob::formatSeconds($job->estimated_seconds) . ')' : '');
-        }
-        if ($job?->filament_g) {
-            $lines[] = '🧵 ' . number_format($job->filament_g, 1, ',', ' ') . ' g';
-        }
+        $vars = [
+            'file'           => $job?->name ?? $filename,
+            'plate'          => $this->plateLabel($job),
+            'duration'       => $job?->duration_seconds ? PrintJob::formatSeconds($job->duration_seconds) : '',
+            'estimated'      => $job?->estimated_seconds ? PrintJob::formatSeconds($job->estimated_seconds) : '',
+            'estimated_note' => $job?->estimated_seconds ? '(odhad ' . PrintJob::formatSeconds($job->estimated_seconds) . ')' : '',
+            'filament'       => $this->filamentLabel($job),
+        ];
 
-        $this->send('on_print_done', [
-            'event'    => 'print_done',
-            'printer'  => $this->printer->name,
-            'file'     => $job?->name ?? $filename,
-            'message'  => implode("\n", $lines),
-            '_image'   => $this->jobSnapshotPath($job) ?? $this->jobThumbnailPath($job),
-        ]);
+        $this->dispatchEvent('print_done', $vars, [
+            'file'             => $vars['file'],
+            'duration_seconds' => $job?->duration_seconds,
+            'filament_g'       => $job?->filament_g,
+        ], $this->jobSnapshotPath($job) ?? $this->jobThumbnailPath($job));
     }
 
     public function printFailed(string $filename, ?PrintJob $job = null): void
     {
-        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
-        $title = ($job?->status === PrintJob::STATUS_CANCELLED) ? '⏹ <b>Tisk zrušen</b>' : '❌ <b>Tisk selhal</b>';
-        $lines = ["{$title} na {$e($this->printer->name)}", "📄 {$e($job?->name ?? $filename)}"];
+        $cancelled = $job?->status === PrintJob::STATUS_CANCELLED;
+        $hms = collect($job?->hms ?? [])->map(fn ($h) => HmsService::decode($h)['message'] ?? null)->filter()->unique()->values();
+
+        $progress = '';
         if ($job && $job->progress !== null) {
-            $lines[] = "📊 {$job->progress} %" . ($job->layer_reached && $job->total_layers ? " · vrstva {$job->layer_reached}/{$job->total_layers}" : '');
-        }
-        $hms = collect($job?->hms ?? [])->map(fn ($h) => HmsService::decode($h)['message'] ?? null)->filter()->unique();
-        if ($hms->isNotEmpty()) {
-            $lines[] = '⚠️ ' . $e($hms->first());
+            $progress = "{$job->progress} %"
+                . ($job->layer_reached && $job->total_layers ? " · vrstva {$job->layer_reached}/{$job->total_layers}" : '');
         }
 
-        $this->send('on_print_failed', [
-            'event'    => 'print_failed',
-            'printer'  => $this->printer->name,
-            'file'     => $job?->name ?? $filename,
-            'message'  => implode("\n", $lines),
-            '_image'   => $this->jobSnapshotPath($job),
+        $vars = [
+            'file'        => $job?->name ?? $filename,
+            'plate'       => $this->plateLabel($job),
+            'result'      => $cancelled ? 'Tisk zrušen' : 'Tisk selhal',
+            'result_icon' => $cancelled ? '⏹' : '❌',
+            'progress'    => $progress,
+            'duration'    => $job?->duration_seconds ? PrintJob::formatSeconds($job->duration_seconds) : '',
+            'error'       => $hms->first() ?? '',
+        ];
+
+        $this->dispatchEvent('print_failed', $vars, [
+            'file'      => $vars['file'],
+            'cancelled' => $cancelled,
+            'progress'  => $job?->progress,
+            'errors'    => $hms->all(),
+        ], $this->jobSnapshotPath($job));
+    }
+
+    public function hmsError(array $hmsErrors): void
+    {
+        $messages = array_values(array_filter(array_map(fn ($h) => HmsService::decode($h)['message'] ?? null, $hmsErrors)));
+
+        $this->dispatchEvent('hms_error', [
+            'errors' => implode("\n", $messages),
+            'error'  => $messages[0] ?? '',
+        ], ['errors' => $messages]);
+    }
+
+    public function filamentRunout(): void
+    {
+        $job = $this->printer
+            ? PrintJob::where('printer_id', $this->printer->id)->where('status', PrintJob::STATUS_RUNNING)->latest('id')->first()
+            : null;
+
+        $this->dispatchEvent('filament_runout', ['file' => $job?->name ?? ''], ['file' => $job?->name]);
+    }
+
+    /**
+     * Zkušební odeslání šablony s ukázkovými daty (z editoru v nastavení).
+     * Výjimky nechává probublat, ať je editor může ukázat.
+     */
+    public function sendTest(NotificationSetting $setting, string $event, array $template): void
+    {
+        $vars = array_merge(NotificationTemplates::SAMPLE, [
+            'date' => now()->format('d.m.Y'),
+            'time' => now()->format('H:i'),
         ]);
+
+        // Jako obrázek poslouží náhled z posledního tisku, který nějaký má
+        $image = null;
+        foreach (PrintJob::with('file')->latest('id')->limit(20)->get() as $job) {
+            if ($image = $this->jobSnapshotPath($job) ?? $this->jobThumbnailPath($job)) {
+                break;
+            }
+        }
+
+        $this->deliver($setting, $event, $vars, ['test' => true], $image, $template);
+    }
+
+    // ------------------------------------------------------------------
+    // Proměnné
+    // ------------------------------------------------------------------
+
+    private function plateLabel(?PrintJob $job): string
+    {
+        if ($job?->plate_index && ($job->file?->metadata['plate_count'] ?? 1) > 1) {
+            return "(deska {$job->plate_index})";
+        }
+        return '';
+    }
+
+    private function filamentLabel(?PrintJob $job): string
+    {
+        if (!$job?->filament_g) {
+            return '';
+        }
+        $types = collect($job->filaments ?? [])->pluck('type')->filter()->unique()->implode(', ');
+        return number_format($job->filament_g, 1, ',', ' ') . ' g' . ($types ? " {$types}" : '');
     }
 
     /** Náhled desky ze souboru (PNG ze slicéru) */
@@ -134,53 +192,60 @@ class NotificationService
         return ($rel && Storage::disk('local')->exists($rel)) ? Storage::disk('local')->path($rel) : null;
     }
 
-    public function hmsError(array $hmsErrors): void
-    {
-        $messages = array_map(fn($h) => HmsService::decode($h)['message'], $hmsErrors);
-        $text     = implode(', ', $messages);
-        $this->send('on_hms_error', [
-            'event'    => 'hms_error',
-            'printer'  => $this->printer->name,
-            'errors'   => $messages,
-            'message'  => "⚠️ Varování tiskárny {$this->printer->name}: {$text}",
-        ]);
-    }
+    // ------------------------------------------------------------------
+    // Rozeslání
+    // ------------------------------------------------------------------
 
-    public function filamentRunout(): void
+    /**
+     * @param array       $vars  proměnné pro šablonu (printer/date/time se doplní)
+     * @param array       $data  strukturovaná data navíc pro MQTT
+     * @param string|null $image cesta k obrázku (pošle se, jen když ho šablona chce)
+     */
+    private function dispatchEvent(string $event, array $vars, array $data = [], ?string $image = null): void
     {
-        $this->send('on_filament_runout', [
-            'event'   => 'filament_runout',
-            'printer' => $this->printer->name,
-            'message' => "🧵 Konec filamentu v tiskárně {$this->printer->name}",
-        ]);
-    }
+        $trigger = NotificationTemplates::event($event)['trigger'] ?? null;
+        if (!$trigger) {
+            return;
+        }
 
-    private function send(string $trigger, array $payload): void
-    {
-        $settings = NotificationSetting::where('enabled', true)
-            ->where($trigger, true)
-            ->get();
+        $vars = array_merge([
+            'printer' => $this->printer?->name ?? '',
+            'date'    => now()->format('d.m.Y'),
+            'time'    => now()->format('H:i'),
+        ], $vars);
+
+        $settings = NotificationSetting::where('enabled', true)->where($trigger, true)->get();
 
         foreach ($settings as $setting) {
             try {
-                match($setting->channel) {
-                    'email'    => $this->sendEmail($setting, $payload),
-                    'telegram' => $this->sendTelegram($setting, $payload),
-                    'mqtt'     => $this->sendMqtt($setting, $payload),
-                    default    => null,
-                };
-            } catch (\Exception $e) {
-                Log::error("Notifikace [{$setting->channel}] selhala: " . $e->getMessage());
+                $this->deliver($setting, $event, $vars, $data, $image);
+            } catch (\Throwable $e) {
+                Log::error("Notifikace [{$setting->channel}] {$event} selhala: " . $e->getMessage());
             }
         }
     }
 
-    private function sendEmail(NotificationSetting $setting, array $payload): void
+    private function deliver(NotificationSetting $setting, string $event, array $vars, array $data, ?string $image, ?array $template = null): void
+    {
+        $tpl = $template ?? NotificationTemplates::forChannel($setting->config, $event);
+        $img = !empty($tpl['image']) && $image && is_file($image) ? $image : null;
+
+        match ($setting->channel) {
+            'email'    => $this->sendEmail($setting, $tpl, $vars, $img),
+            'telegram' => $this->sendTelegram($setting, $tpl, $vars, $img),
+            'mqtt'     => $this->sendMqtt($setting, $event, $tpl, $vars, $data),
+            default    => null,
+        };
+    }
+
+    private function sendEmail(NotificationSetting $setting, array $tpl, array $vars, ?string $image): void
     {
         $address = $setting->config['address'] ?? null;
-        if (!$address) return;
+        if (!$address) {
+            throw new \RuntimeException('Chybí e-mailová adresa.');
+        }
 
-        // Aplikujeme SMTP config z DB
+        // SMTP z nastavení appky
         if (AppSetting::get('smtp_host')) {
             config([
                 'mail.mailers.smtp.host'       => AppSetting::get('smtp_host'),
@@ -194,74 +259,78 @@ class NotificationService
             ]);
         }
 
-        $subjects = [
-            'print_start'     => 'Tisk začal',
-            'print_done'      => 'Tisk dokončen',
-            'print_failed'    => 'Tisk selhal',
-            'hms_error'       => 'Varování tiskárny',
-            'filament_runout' => 'Konec filamentu',
-        ];
-        $subject = 'BambuPS – ' . ($subjects[$payload['event'] ?? ''] ?? 'Notifikace') . ' – ' . $this->printer->name;
-        $text    = html_entity_decode(strip_tags($payload['message']), ENT_QUOTES);
-        $image   = $payload['_image'] ?? null;
+        $subject = trim(preg_replace('/\s+/', ' ', NotificationTemplates::render($tpl['subject'] ?: 'BambuPS – {printer}', $vars, false)));
+        $text    = NotificationTemplates::render($tpl['body'], $vars, false);
 
-        Mail::raw($text, function($m) use ($address, $subject, $image) {
-            $m->to($address)->subject($subject);
-            if ($image && is_file($image)) {
+        Mail::raw($text, function ($m) use ($address, $subject, $image) {
+            $m->to($address)->subject($subject ?: 'BambuPS');
+            if ($image) {
                 $m->attach($image, ['as' => 'nahled.' . pathinfo($image, PATHINFO_EXTENSION)]);
             }
         });
     }
 
-    private function sendTelegram(NotificationSetting $setting, array $payload): void
+    private function sendTelegram(NotificationSetting $setting, array $tpl, array $vars, ?string $image): void
     {
         $token  = $setting->config['bot_token'] ?? null;
-        $chatId = $setting->config['chat_id']   ?? null;
-        if (!$token || !$chatId) return;
+        $chatId = $setting->config['chat_id'] ?? null;
+        if (!$token || !$chatId) {
+            throw new \RuntimeException('Chybí Bot Token nebo Chat ID.');
+        }
 
-        $image = $payload['_image'] ?? null;
+        $message = NotificationTemplates::render($tpl['body'], $vars, true);
+        $api     = "https://api.telegram.org/bot{$token}";
 
         // S obrázkem jako fotka s popiskem (limit popisku 1024 znaků)
-        if ($image && is_file($image) && mb_strlen($payload['message']) <= 1024) {
+        if ($image && mb_strlen($message) <= 1024) {
             $response = Http::timeout(20)
                 ->attach('photo', file_get_contents($image), basename($image))
-                ->post("https://api.telegram.org/bot{$token}/sendPhoto", [
-                    'chat_id'    => $chatId,
-                    'caption'    => $payload['message'],
-                    'parse_mode' => 'HTML',
-                ]);
+                ->post("{$api}/sendPhoto", ['chat_id' => $chatId, 'caption' => $message, 'parse_mode' => 'HTML']);
             if ($response->successful()) {
                 return;
             }
             Log::warning('Telegram sendPhoto selhal, posílám jen text: ' . $response->body());
         }
 
-        Http::post("https://api.telegram.org/bot{$token}/sendMessage", [
-            'chat_id'    => $chatId,
-            'text'       => $payload['message'],
-            'parse_mode' => 'HTML',
+        $response = Http::timeout(15)->post("{$api}/sendMessage", [
+            'chat_id' => $chatId, 'text' => $message, 'parse_mode' => 'HTML',
         ]);
+
+        // Rozbité HTML ve vlastní šabloně -> pošli aspoň čistý text
+        if (!$response->successful() && str_contains($response->body(), 'parse entities')) {
+            $response = Http::timeout(15)->post("{$api}/sendMessage", [
+                'chat_id' => $chatId,
+                'text'    => NotificationTemplates::render($tpl['body'], $vars, false),
+            ]);
+        }
+
+        if (!$response->successful()) {
+            throw new \RuntimeException('Telegram API: ' . $response->body());
+        }
     }
 
-    private function sendMqtt(NotificationSetting $setting, array $payload): void
+    private function sendMqtt(NotificationSetting $setting, string $event, array $tpl, array $vars, array $data): void
     {
-        $host  = $setting->config['host']  ?? null;
-        $port  = (int)($setting->config['port'] ?? 1883);
+        $host  = $setting->config['host'] ?? null;
+        $port  = (int) ($setting->config['port'] ?? 1883);
         $topic = $setting->config['topic'] ?? 'bambups/events';
-        if (!$host) return;
+        if (!$host) {
+            throw new \RuntimeException('Chybí MQTT host.');
+        }
 
         $mqtt = new \PhpMqtt\Client\MqttClient($host, $port, 'bambups-notif-' . uniqid());
-        $connectionSettings = (new \PhpMqtt\Client\ConnectionSettings)
-            ->setUsername($setting->config['username'] ?? null)
-            ->setPassword($setting->config['password'] ?? null)
-            ->setConnectTimeout(5);
-        $mqtt->connect($connectionSettings);
-        unset($payload['_image']);
-        $payload['message'] = html_entity_decode(strip_tags($payload['message']), ENT_QUOTES);
-        $mqtt->publish($topic, json_encode(array_merge($payload, [
+        $mqtt->connect((new \PhpMqtt\Client\ConnectionSettings)
+            ->setUsername(($setting->config['username'] ?? '') ?: null)
+            ->setPassword(($setting->config['password'] ?? '') ?: null)
+            ->setConnectTimeout(5));
+
+        $mqtt->publish($topic, json_encode(array_merge($data, [
+            'event'   => $event,
+            'printer' => $vars['printer'] ?? '',
+            'message' => NotificationTemplates::render($tpl['body'], $vars, false),
+            'vars'    => $vars,
             'time'    => now()->toISOString(),
-            'printer' => $this->printer->name,
-        ])));
+        ]), JSON_UNESCAPED_UNICODE));
         $mqtt->disconnect();
     }
 }

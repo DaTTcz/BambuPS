@@ -22,7 +22,9 @@ class CameraProvisionService
 
         $streams = '';
         foreach ($printers as $printer) {
-            $streams .= "  printer_{$printer->id}: rtsps://bblp:{$printer->access_code}@{$printer->ip_address}:322/streaming/live/1\n";
+            // Jednoduché uvozovky v YAML: URL může obsahovat ?, & apod.
+            $source   = str_replace("'", "''", $printer->cameraSource());
+            $streams .= "  printer_{$printer->id}: '{$source}'\n";
         }
 
         $yaml = "api:\n  listen: :{$apiPort}\n\nrtsp:\n  listen: :8554\n\nstreams:\n{$streams}";
@@ -35,6 +37,14 @@ class CameraProvisionService
      */
     public function writeCameraSupervisorConf(Printer $printer): void
     {
+        // camera:capture (HLS/snapshot přes ffmpeg -c:v copy) je jen pro Bambu
+        // H.264 stream. Vlastní kamera (např. MJPEG) ho nepotřebuje - snímky
+        // bere go2rtc nebo přímo URL snímku.
+        if ($printer->hasCustomCamera()) {
+            $this->removeCameraSupervisorConf($printer->id);
+            return;
+        }
+
         $name = "bambups-camera-{$printer->id}";
         $conf = "[program:{$name}]\n"
             . "command=php /opt/bambups/app/artisan camera:capture {$printer->id}\n"
@@ -91,6 +101,9 @@ class CameraProvisionService
      */
     public function restartCamera(Printer $printer): void
     {
+        if ($printer->hasCustomCamera()) {
+            return;
+        }
         shell_exec("sudo supervisorctl restart bambups-camera-{$printer->id} 2>&1");
     }
 

@@ -13,6 +13,8 @@ class PrinterManager extends Component
     public string $serial_number = '';
     public string $ip_address    = '';
     public string $access_code   = '';
+    public string $camera_stream_url   = '';
+    public string $camera_snapshot_url = '';
     public bool   $enabled       = true;
 
     // Stav progress checklistu po uložení
@@ -29,6 +31,8 @@ class PrinterManager extends Component
         'serial_number' => 'required|string|max:255',
         'ip_address'    => 'required|ip',
         'access_code'   => 'required|string|max:255',
+        'camera_stream_url'   => 'nullable|url|max:500',
+        'camera_snapshot_url' => 'nullable|url|max:500',
     ];
     public function getPrintersProperty()
     {
@@ -36,7 +40,7 @@ class PrinterManager extends Component
     }
     public function openCreate(): void
     {
-        $this->reset(['name', 'model', 'serial_number', 'ip_address', 'access_code', 'editingId']);
+        $this->reset(['name', 'model', 'serial_number', 'ip_address', 'access_code', 'camera_stream_url', 'camera_snapshot_url', 'editingId']);
         $this->enabled  = true;
         $this->editing  = false;
         $this->showModal = true;
@@ -50,6 +54,8 @@ class PrinterManager extends Component
         $this->serial_number  = $printer->serial_number;
         $this->ip_address     = $printer->ip_address;
         $this->access_code    = $printer->access_code;
+        $this->camera_stream_url   = (string) $printer->camera_stream_url;
+        $this->camera_snapshot_url = (string) $printer->camera_snapshot_url;
         $this->enabled        = $printer->enabled;
         $this->editing        = true;
         $this->showModal      = true;
@@ -96,6 +102,8 @@ class PrinterManager extends Component
                 'serial_number' => $this->serial_number,
                 'ip_address'    => $this->ip_address,
                 'access_code'   => $this->access_code,
+                'camera_stream_url'   => trim($this->camera_stream_url) ?: null,
+                'camera_snapshot_url' => trim($this->camera_snapshot_url) ?: null,
                 'enabled'       => $this->enabled,
             ]);
         } else {
@@ -105,6 +113,8 @@ class PrinterManager extends Component
                 'serial_number' => $this->serial_number,
                 'ip_address'    => $this->ip_address,
                 'access_code'   => $this->access_code,
+                'camera_stream_url'   => trim($this->camera_stream_url) ?: null,
+                'camera_snapshot_url' => trim($this->camera_snapshot_url) ?: null,
                 'enabled'       => $this->enabled,
             ]);
         }

@@ -57,7 +57,8 @@
                         <p class="text-sm text-gray-500 mb-4">
                             Podložka #{{ $currentPlate['index'] }}
                             @if(!empty($currentPlate['objects']))
-                                · {{ implode(', ', $currentPlate['objects']) }}
+                                {{-- Stejné objekty sloučit: "A.stl ×8" / "A.stl ×2, B.stl ×3" --}}
+                                · {{ collect($currentPlate['objects'])->countBy()->map(fn ($n, $name) => $n > 1 ? "{$name} ×{$n}" : $name)->implode(', ') }}
                             @endif
                         </p>
 

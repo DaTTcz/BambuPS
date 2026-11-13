@@ -119,6 +119,35 @@
                             class="w-full border border-gray-300 dark:border-bambu-dark-4 rounded-lg px-4 py-2 text-sm dark:bg-bambu-dark-3 dark:text-bambu-text">
                         @error('access_code') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
                     </div>
+
+                    {{-- Vlastní kamera (volitelné) --}}
+                    <div x-data="{ open: {{ ($camera_stream_url || $camera_snapshot_url) ? 'true' : 'false' }} }"
+                        class="border border-gray-200 dark:border-bambu-dark-4 rounded-lg">
+                        <button type="button" @click="open = !open"
+                            class="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-600 dark:text-bambu-text-dim">
+                            <span>📷 Vlastní kamera <span class="text-xs text-gray-400">(volitelné)</span></span>
+                            <span class="text-xs transition-transform" :class="open ? 'rotate-90' : ''">▶</span>
+                        </button>
+                        <div x-show="open" x-cloak class="px-3 pb-3 space-y-3">
+                            <p class="text-xs text-gray-400 dark:text-bambu-text-dim">
+                                Externí kamera místo vestavěné (např. mjpg-streamer na Raspberry Pi). Prázdné = kamera tiskárny.
+                                go2rtc umí MJPEG/HTTP, RTSP i RTMP.
+                            </p>
+                            <div>
+                                <label class="block text-sm text-gray-600 dark:text-bambu-text-dim mb-1">URL streamu</label>
+                                <input wire:model="camera_stream_url" type="text" placeholder="http://192.168.1.50/webcam/?action=stream"
+                                    class="w-full border border-gray-300 dark:border-bambu-dark-4 rounded-lg px-4 py-2 text-sm font-mono dark:bg-bambu-dark-3 dark:text-bambu-text">
+                                @error('camera_stream_url') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 dark:text-bambu-text-dim mb-1">URL snímku <span class="text-xs text-gray-400">(nepovinné)</span></label>
+                                <input wire:model="camera_snapshot_url" type="text" placeholder="http://192.168.1.50/webcam/?action=snapshot"
+                                    class="w-full border border-gray-300 dark:border-bambu-dark-4 rounded-lg px-4 py-2 text-sm font-mono dark:bg-bambu-dark-3 dark:text-bambu-text">
+                                @error('camera_snapshot_url') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
+                                <p class="text-xs text-gray-400 dark:text-bambu-text-dim mt-1">Bez něj se snímek vezme ze streamu.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="flex justify-end space-x-3 mt-6">

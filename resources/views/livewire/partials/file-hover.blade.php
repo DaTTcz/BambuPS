@@ -15,7 +15,7 @@
         foreach (($pl['filaments'] ?? []) as $f) {
             $key = strtoupper(($f['type'] ?? '?') . '|' . ($f['color'] ?? ''));
             if (!isset($hoverFilaments[$key])) {
-                $hoverFilaments[$key] = ['type' => $f['type'] ?? '?', 'color' => $f['color'] ?? '#888888', 'g' => 0];
+                $hoverFilaments[$key] = ['type' => $f['type'] ?? '?', 'color' => $f['color'] ?? '#888888', 'g' => 0, 'tool' => $f['tool'] ?? null];
             }
             $hoverFilaments[$key]['g'] += (float) ($f['used_g'] ?? 0);
         }
@@ -27,6 +27,9 @@
 
     $hoverRows = array_filter([
         'Tiskárna'     => $m['printer_model'] ?? null,
+        'Nástroje'     => !empty($m['tools_used'])
+                            ? implode(', ', array_map(fn ($t) => 'T' . $t, $m['tools_used'])) . (!empty($m['tool_count']) ? ' z ' . $m['tool_count'] : '')
+                            : null,
         'Čas tisku'    => $m['print_time'] ?? null,
         'Filament'     => !empty($m['filament_used_g'])
                             ? $m['filament_used_g'] . ' g' . (!empty($m['filament_used_m']) ? ' · ' . $m['filament_used_m'] . ' m' : '')
@@ -82,7 +85,7 @@
                 <div class="flex items-center justify-between text-xs">
                     <span class="flex items-center gap-1.5 min-w-0">
                         <span class="w-3 h-3 rounded-full border border-black/10 dark:border-white/20 shrink-0" style="background: {{ $f['color'] }}"></span>
-                        <span class="text-gray-700 dark:text-bambu-text truncate">{{ $f['type'] }}</span>
+                        <span class="text-gray-700 dark:text-bambu-text truncate">@if($f['tool'] !== null)<span class="font-mono text-gray-400 dark:text-bambu-text-dim">T{{ $f['tool'] }}</span> @endif{{ $f['type'] }}</span>
                     </span>
                     @if($f['g'] > 0)
                         <span class="text-gray-500 dark:text-bambu-text-dim shrink-0">{{ round($f['g'], 1) }} g</span>

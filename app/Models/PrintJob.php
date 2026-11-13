@@ -102,17 +102,29 @@ class PrintJob extends Model
     /** Náhled: snímek z kamery na konci, jinak náhled desky souboru */
     public function getThumbnailUrlAttribute(): ?string
     {
+        return $this->thumbnailUrls()[0] ?? null;
+    }
+
+    /**
+     * Všechny možné náhledy v pořadí, jak se mají zkoušet
+     * (snímek z kamery -> náhled desky -> náhled souboru).
+     * Když se jeden nenačte, zobrazení přejde na další.
+     */
+    public function thumbnailUrls(): array
+    {
+        $urls = [];
         if ($this->snapshot_path) {
-            return route('history.snapshot', $this->id);
+            $urls[] = route('history.snapshot', $this->id);
         }
         if ($this->file) {
-            $plates = $this->file->metadata['plates'] ?? [];
-            $plate  = collect($plates)->firstWhere('index', $this->plate_index);
+            $plate = collect($this->file->metadata['plates'] ?? [])->firstWhere('index', $this->plate_index);
             if ($plate && !empty($plate['thumbnail_path'])) {
-                return route('file.plate.thumbnail', ['id' => $this->file->id, 'plateIndex' => $plate['index']]);
+                $urls[] = route('file.plate.thumbnail', ['id' => $this->file->id, 'plateIndex' => $plate['index']]);
             }
-            return $this->file->list_thumbnail_url;
+            if ($this->file->list_thumbnail_url) {
+                $urls[] = $this->file->list_thumbnail_url;
+            }
         }
-        return null;
+        return array_values(array_unique($urls));
     }
 }
