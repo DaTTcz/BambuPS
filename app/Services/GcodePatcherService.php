@@ -112,6 +112,40 @@ class GcodePatcherService
     }
 
     /**
+     * Teplota trysky filamentu (0-indexovaný) z project_settings.
+     * Novější Bambu Studio / OrcaSlicer mají pole po (filament × varianta
+     * trysky) - např. 16 hodnot pro 8 filamentů (Standard / High Flow).
+     * Pozici najdeme přes filament_self_index + filament_extruder_variant.
+     *
+     * @return array{initial:int, other:int}|null
+     */
+    public static function filamentNozzleTemps(array $settings, int $filament): ?array
+    {
+        $nt   = array_values((array) ($settings['nozzle_temperature'] ?? []));
+        $nti  = array_values((array) ($settings['nozzle_temperature_initial_layer'] ?? []));
+        $self = array_values((array) ($settings['filament_self_index'] ?? []));
+        $pos  = $filament;
+
+        if ($self && count($self) === count($nt)) {
+            $volume   = (string) ((array) ($settings['nozzle_volume_type'] ?? ['Standard']))[0];
+            $variants = array_values((array) ($settings['filament_extruder_variant'] ?? []));
+            $cands    = array_keys(array_filter($self, fn ($v) => (int) $v === $filament + 1));
+            $pos      = $cands[0] ?? null;
+            foreach ($cands as $k) {
+                if (isset($variants[$k]) && str_ends_with($variants[$k], $volume)) {
+                    $pos = $k;
+                    break;
+                }
+            }
+        }
+
+        if ($pos === null || empty($nt[$pos])) {
+            return null;
+        }
+        return ['initial' => (int) ($nti[$pos] ?? $nt[$pos]), 'other' => (int) $nt[$pos]];
+    }
+
+    /**
      * Teploty trysky pro filamenty desky: [index filamentu => ['initial' => int, 'other' => int]].
      * Bere je z project_settings.config (pole po filamentech), u souboru bez
      * nich z gcode (první M109 ve startu = 1. vrstva, první M104 po ní = další vrstvy).
@@ -148,16 +182,27 @@ class GcodePatcherService
             }
         }
 
-        $other   = (array) ($settings['nozzle_temperature'] ?? []);
-        $initial = (array) ($settings['nozzle_temperature_initial_layer'] ?? []);
+        // Hlavička gcode (; nozzle_temperature = 210,...,225) má teploty už
+        // vyřešené po filamentech pro zvolenou trysku - nejspolehlivější zdroj
+        $hdr = [];
+        if ($gcode !== false) {
+            foreach (['other' => 'nozzle_temperature', 'initial' => 'nozzle_temperature_initial_layer'] as $k => $key) {
+                if (preg_match('/^; ' . $key . ' = ([\d,]+)\s*$/m', $gcode, $m)) {
+                    $hdr[$k] = array_map('intval', explode(',', $m[1]));
+                }
+            }
+        }
 
         $result = [];
         foreach (array_values($filaments) as $i => $f) {
             $idx = (int) ($ids[$i] ?? $f['extruder_index'] ?? $i);
-            $o   = (int) ($other[$idx] ?? 0);
-            $in  = (int) ($initial[$idx] ?? $o);
-            if ($o > 0) {
-                $result[$i] = ['initial' => $in ?: $o, 'other' => $o];
+            if (!empty($hdr['other'][$idx])) {
+                $result[$i] = [
+                    'initial' => $hdr['initial'][$idx] ?? $hdr['other'][$idx],
+                    'other'   => $hdr['other'][$idx],
+                ];
+            } elseif ($t = self::filamentNozzleTemps($settings, $idx)) {
+                $result[$i] = $t;
             }
         }
 
