@@ -54,7 +54,7 @@
         'Desky'        => (($m['plate_count'] ?? 0) > 1) ? $m['plate_count'] : null,
         'Profil'       => $m['print_profile'] ?? null,
         'Velikost'     => $file->size_formatted,
-        'Nahráno'      => $file->created_at?->format('d.m.Y H:i'),
+        'Nahráno'      => $file->created_at?->local()->format('d.m.Y H:i'),
     ], fn ($v) => $v !== null && $v !== '');
 @endphp
 <div x-ref="pop" x-show="open" x-cloak

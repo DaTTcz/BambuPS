@@ -227,7 +227,7 @@
                                     {{ $file->size_formatted }}
                                 </td>
                                 <td class="px-4 py-3 text-gray-400 dark:text-bambu-text-dim text-xs hidden lg:table-cell">
-                                    {{ $file->created_at->format('d.m.Y') }}
+                                    {{ $file->created_at->local()->format('d.m.Y') }}
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="flex items-center space-x-1 justify-end">

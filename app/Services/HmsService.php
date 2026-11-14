@@ -94,6 +94,18 @@ class HmsService
             return self::MESSAGES[$key] . $unitLabel;
         }
 
+        // AMS sloty 2-4: kódy mají stejný význam jako u slotu 1, liší se jen
+        // číslicí v attr (xx1000-1300 = motor slotu, xx2000-2300 = filament
+        // ve slotu). Popis vezmeme ze slotu 1 a přepíšeme číslo slotu.
+        if (in_array($moduleId, self::MULTI_UNIT_MODULES, true)
+            && preg_match('/^([12])([0-3])00$/', substr($lookupAttr, 4, 4), $m) && $m[2] !== '0') {
+            $slot1Key = substr($lookupAttr, 0, 4) . $m[1] . '000_' . $code;
+            if (isset(self::MESSAGES[$slot1Key])) {
+                $slot = (int) $m[2] + 1;
+                return preg_replace(['/Slot 1\b/', '/slotu 1\b/'], ["Slot {$slot}", "slotu {$slot}"], self::MESSAGES[$slot1Key]) . $unitLabel;
+            }
+        }
+
         $moduleName = self::MODULE_NAMES[$moduleId] ?? null;
         if ($moduleName) {
             return "{$moduleName}: Neznámá chyba{$unitLabel} (kód: {$code})";

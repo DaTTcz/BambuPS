@@ -99,7 +99,7 @@
                             ->first() : null;
                         $plateIdx    = $printFile?->metadata['plates'][0]['index'] ?? 1;
                         $remaining   = $printer->status['mc_remaining_time'] ?? 0;
-                        $endTime     = $remaining > 0 ? now()->timezone('Europe/Prague')->addMinutes($remaining) : null;
+                        $endTime     = $remaining > 0 ? now()->local()->addMinutes($remaining) : null;
                         $layerHeight = $printFile?->metadata['plates'][0]['layer_height'] ?? null;
                     @endphp
                     <div class="flex items-center space-x-4 pb-3 border-b border-gray-100 dark:border-bambu-dark-4">

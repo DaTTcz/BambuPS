@@ -30,7 +30,7 @@
             @if($printer->status_text === 'RUNNING' && $printer->print_progress !== null)
                 @php
                     $remaining  = $printer->status['mc_remaining_time'] ?? 0;
-                    $endTime    = $remaining > 0 ? now()->timezone('Europe/Prague')->addMinutes($remaining) : null;
+                    $endTime    = $remaining > 0 ? now()->local()->addMinutes($remaining) : null;
                     $subtask    = $printer->status['subtask_name'] ?? '';
                     $printFile  = $subtask ? \App\Models\File::where('user_id', auth()->id())
                         ->where('original_name', 'like', '%' . pathinfo($subtask, PATHINFO_FILENAME) . '%')

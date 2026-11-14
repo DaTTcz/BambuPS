@@ -256,6 +256,7 @@ class ThreeMfParserService
                 $metadata['layer_height']         = $json['layer_height'] ?? null;
                 $metadata['initial_layer_height'] = $json['initial_layer_print_height'] ?? null;
                 $metadata['nozzle_temp']          = $json['nozzle_temperature'][0] ?? null;
+                $metadata['nozzle_temp_initial_layer'] = $json['nozzle_temperature_initial_layer'][0] ?? $metadata['nozzle_temp'];
                 $metadata['support_type']         = $json['support_type'] ?? null;
                 $metadata['spiral_mode']          = ($json['spiral_mode'] ?? '0') === '1';
                 $metadata['infill_density']       = $json['sparse_infill_density'] ?? null;

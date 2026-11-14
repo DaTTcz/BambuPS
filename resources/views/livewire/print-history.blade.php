@@ -112,7 +112,7 @@
                             <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-xs text-gray-400 dark:text-bambu-text-dim">
                                 <span>🖨️ {{ $job->printer?->name ?? $job->printer_name ?? '–' }}</span>
                                 <span>·</span>
-                                <span title="{{ $job->started_at?->format('d.m.Y H:i:s') }}">{{ $job->started_at?->format('d.m.Y H:i') ?? '–' }}</span>
+                                <span title="{{ $job->started_at?->local()->format('d.m.Y H:i:s') }}">{{ $job->started_at?->local()->format('d.m.Y H:i') ?? '–' }}</span>
                                 @if($job->source === 'external')
                                     <span>·</span><span title="Spuštěno mimo BambuPS (slicer, displej, Handy)">mimo appku</span>
                                 @endif

@@ -45,7 +45,7 @@
                                 @endif
                             </button>
                             <span class="text-xs text-gray-400 dark:text-bambu-text-dim shrink-0 hidden sm:inline">
-                                {{ $r['published_at'] ? \Carbon\Carbon::parse($r['published_at'])->timezone(config('app.timezone'))->format('d.m.Y') : '' }}
+                                {{ $r['published_at'] ? \Carbon\Carbon::parse($r['published_at'])->local()->format('d.m.Y') : '' }}
                             </span>
 
                             @if($isCurrent)
@@ -96,7 +96,7 @@
             <div class="divide-y divide-gray-100 dark:divide-bambu-dark-4">
                 @foreach($this->backups as $b)
                     <div wire:key="bak-{{ $b['name'] }}" class="px-5 py-2.5 flex items-center gap-3 text-sm">
-                        <span class="text-gray-700 dark:text-bambu-text w-32 shrink-0">{{ $b['created_at']->format('d.m.Y H:i') }}</span>
+                        <span class="text-gray-700 dark:text-bambu-text w-32 shrink-0">{{ $b['created_at']->local()->format('d.m.Y H:i') }}</span>
                         <span class="font-mono text-xs text-gray-500 dark:text-bambu-text-dim shrink-0 w-20 truncate" title="Verze appky v době zálohy">{{ $b['version'] }}</span>
                         <span class="text-xs text-gray-500 dark:text-bambu-text-dim flex-1 truncate">{{ $b['reason'] }}</span>
                         <span class="text-xs text-gray-400 dark:text-bambu-text-dim shrink-0 hidden sm:inline">{{ number_format($b['size'] / 1024, 0, ',', ' ') }} kB</span>
@@ -104,7 +104,7 @@
                             class="p-1 text-gray-400 hover:text-green-600 text-xs shrink-0">⬇️</a>
                         <button wire:click="askRestore('{{ $b['name'] }}')" title="Obnovit"
                             class="px-2 py-0.5 text-xs rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 shrink-0">Obnovit</button>
-                        <button wire:click="deleteBackup('{{ $b['name'] }}')" wire:confirm="Smazat zálohu z {{ $b['created_at']->format('d.m.Y H:i') }}?" title="Smazat"
+                        <button wire:click="deleteBackup('{{ $b['name'] }}')" wire:confirm="Smazat zálohu z {{ $b['created_at']->local()->format('d.m.Y H:i') }}?" title="Smazat"
                             class="p-1 text-gray-300 dark:text-bambu-dark-5 hover:text-red-600 text-xs shrink-0">🗑️</button>
                     </div>
                 @endforeach
@@ -119,7 +119,7 @@
             <div class="bg-white dark:bg-bambu-dark-2 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-100 dark:border-bambu-dark-4">
                 <h3 class="font-semibold text-gray-900 dark:text-bambu-text mb-2">Obnovit databázi ze zálohy?</h3>
                 <p class="text-sm text-gray-600 dark:text-bambu-text-dim mb-3">
-                    Databáze se vrátí do stavu z <strong>{{ $rb ? $rb['created_at']->format('d.m.Y H:i') : '?' }}</strong>.
+                    Databáze se vrátí do stavu z <strong>{{ $rb ? $rb['created_at']->local()->format('d.m.Y H:i') : '?' }}</strong>.
                     Všechno, co se změnilo od té doby (tiskárny, nastavení, historie tisku, záznamy o souborech), se přepíše.
                     Současný stav se předtím automaticky zazálohuje.
                 </p>

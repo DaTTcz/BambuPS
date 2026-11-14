@@ -33,7 +33,7 @@ class NotificationService
 
         $eta = '';
         if ($seconds) {
-            $end = now()->addSeconds($seconds);
+            $end = now()->local()->addSeconds($seconds);
             $eta = $end->format('H:i') . ($end->isToday() ? '' : ' (' . $end->format('d.m.') . ')');
         }
 
@@ -137,8 +137,8 @@ class NotificationService
     public function sendTest(NotificationSetting $setting, string $event, array $template): void
     {
         $vars = array_merge(NotificationTemplates::SAMPLE, [
-            'date' => now()->format('d.m.Y'),
-            'time' => now()->format('H:i'),
+            'date' => now()->local()->format('d.m.Y'),
+            'time' => now()->local()->format('H:i'),
         ]);
 
         // Jako obrázek poslouží náhled z posledního tisku, který nějaký má
@@ -210,8 +210,8 @@ class NotificationService
 
         $vars = array_merge([
             'printer' => $this->printer?->name ?? '',
-            'date'    => now()->format('d.m.Y'),
-            'time'    => now()->format('H:i'),
+            'date'    => now()->local()->format('d.m.Y'),
+            'time'    => now()->local()->format('H:i'),
         ], $vars);
 
         $settings = NotificationSetting::where('enabled', true)->where($trigger, true)->get();

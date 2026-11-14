@@ -64,6 +64,10 @@ Route::middleware([
         return view('modules');
     })->name('modules.settings');
 
+    Route::get('/settings/general', function () {
+        return view('general');
+    })->name('general.settings');
+
     Route::get('/settings/versions', function () {
         return view('versions');
     })->name('versions.settings');

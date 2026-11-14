@@ -196,7 +196,7 @@
                                     <div class="flex items-center justify-between bg-gray-50 dark:bg-bambu-dark-3 rounded-lg px-4 py-2">
                                         <div>
                                             <p class="text-sm font-medium text-gray-700 dark:text-bambu-text">{{ str_replace('Slicer:', '', $token->name) }}</p>
-                                            <p class="text-xs text-gray-400 dark:text-bambu-text-dim">Vytvořen: {{ $token->created_at->format('d.m.Y H:i') }}</p>
+                                            <p class="text-xs text-gray-400 dark:text-bambu-text-dim">Vytvořen: {{ $token->created_at->local()->format('d.m.Y H:i') }}</p>
                                         </div>
                                         <button wire:click="deleteToken({{ $token->id }})"
                                             wire:confirm="Opravdu smazat token?"

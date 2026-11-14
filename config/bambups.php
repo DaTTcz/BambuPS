@@ -31,5 +31,10 @@ return [
     'bed_mesh_max_age_days'   => (int) env('BAMBUPS_BED_MESH_MAX_AGE_DAYS', 7),
     'bed_mesh_temp_tolerance' => (int) env('BAMBUPS_BED_MESH_TEMP_TOLERANCE', 10),
 
+    /*
+    | Výchozí časová zóna pro zobrazení časů (lze změnit v Nastavení → Obecné).
+    */
+    'timezone' => env('BAMBUPS_TIMEZONE', 'Europe/Prague'),
+
     'min_switch_version' => env('BAMBUPS_MIN_SWITCH_VERSION', 'v0.1.10'),
 ];

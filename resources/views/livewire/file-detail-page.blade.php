@@ -98,7 +98,11 @@
                             @if(!empty($file->metadata['nozzle_temp']))
                                 <div class="bg-gray-50 rounded-lg p-3">
                                     <p class="text-xs text-gray-400">Teplota trysky</p>
-                                    <p class="text-sm font-semibold text-gray-700 mt-0.5">🌡️ {{ $file->metadata['nozzle_temp'] }}°C</p>
+                                    <p class="text-sm font-semibold text-gray-700 mt-0.5">🌡️ {{ $file->metadata['nozzle_temp'] }}°C
+                                        @if(!empty($file->metadata['nozzle_temp_initial_layer']))
+                                            <span class="text-xs text-gray-400 font-normal">/ první vrstva {{ $file->metadata['nozzle_temp_initial_layer'] }}°C</span>
+                                        @endif
+                                    </p>
                                 </div>
                             @endif
                             @if(!empty($file->metadata['bed_temp']))
@@ -265,7 +269,7 @@
                         @else
                             <span class="w-10 h-8 shrink-0 rounded bg-gray-100 dark:bg-bambu-dark-3 flex items-center justify-center">🖨️</span>
                         @endif
-                        <span class="text-gray-700 dark:text-bambu-text w-28 shrink-0">{{ $job->started_at?->format('d.m.Y H:i') ?? '–' }}</span>
+                        <span class="text-gray-700 dark:text-bambu-text w-28 shrink-0">{{ $job->started_at?->local()->format('d.m.Y H:i') ?? '–' }}</span>
                         <span class="text-gray-500 dark:text-bambu-text-dim truncate flex-1">
                             {{ $job->printer?->name ?? $job->printer_name ?? '–' }}
                             @if($job->plate_index && count($plates) > 1) · deska {{ $job->plate_index }} @endif
@@ -421,6 +425,53 @@
                                         ⚠️ Jiná podložka, než pro kterou byl soubor naslicovaný ({{ $file->metadata['bed_type'] ?? '?' }}) - appka před tiskem upraví v kopii souboru teplotu podložky a Z-offset pro Textured PEI.
                                     </p>
                                 @endif
+                            </div>
+                        @endif
+
+                        {{-- Teplota trysky --}}
+                        @if(!empty($nozzleTemps))
+                            @php
+                                $dlgPlate     = collect($file->metadata['plates'] ?? [])->firstWhere('index', $selectedPlate);
+                                $dlgFilaments = array_values($dlgPlate['filaments'] ?? []);
+                            @endphp
+                            <div class="bg-gray-50 rounded-lg px-3 py-2 mb-2 space-y-1.5">
+                                @foreach($nozzleTemps as $i => $t)
+                                    @php
+                                        $f       = $dlgFilaments[$i] ?? null;
+                                        $changed = (int) $t['new_initial'] !== (int) $t['initial'] || (int) $t['new_other'] !== (int) $t['other'];
+                                    @endphp
+                                    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1" wire:key="nozzle-{{ $i }}">
+                                        <span class="text-sm text-gray-600 flex items-center gap-1.5 min-w-0">
+                                            🌡️ Tryska
+                                            @if(count($nozzleTemps) > 1 && $f)
+                                                <span class="w-3.5 h-3.5 rounded-full border border-gray-200 shrink-0" style="background-color: {{ $f['color'] }}"></span>
+                                                <span class="text-xs text-gray-500 truncate">{{ $f['type'] }}</span>
+                                            @endif
+                                        </span>
+                                        <div class="flex items-center gap-1.5 shrink-0">
+                                            <label class="text-xs text-gray-500">1. vrstva</label>
+                                            <input type="number" min="150" max="350" step="1"
+                                                wire:model.live.debounce.400ms="nozzleTemps.{{ $i }}.new_initial"
+                                                class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white text-right">
+                                            <label class="text-xs text-gray-500 ml-1">další</label>
+                                            <input type="number" min="150" max="350" step="1"
+                                                wire:model.live.debounce.400ms="nozzleTemps.{{ $i }}.new_other"
+                                                class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white text-right">
+                                            <span class="text-sm text-gray-500">°C</span>
+                                            @if($changed)
+                                                <button type="button"
+                                                    wire:click="resetNozzle({{ $i }})"
+                                                    title="Vrátit teploty ze souboru" class="text-xs text-gray-400 hover:text-gray-700">↺</button>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    @if($changed)
+                                        <p class="text-xs text-amber-600">
+                                            ⚠️ Ve souboru je 1. vrstva {{ $t['initial'] }} °C, další {{ $t['other'] }} °C.
+                                            Appka v kopii souboru nastaví {{ $t['new_initial'] ?: $t['initial'] }} °C a {{ $t['new_other'] ?: $t['other'] }} °C.
+                                        </p>
+                                    @endif
+                                @endforeach
                             </div>
                         @endif
 

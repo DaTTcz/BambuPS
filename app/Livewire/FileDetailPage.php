@@ -37,6 +37,9 @@ class FileDetailPage extends Component
     /** Obsahuje gcode zvolené desky skenování 1. vrstvy? null = nevíme */
     public ?bool $fileHasLayerScan = null;
 
+    /** Teplota trysky po filamentech: [i => ['initial', 'other', 'new_initial', 'new_other']] */
+    public array $nozzleTemps = [];
+
     // Rychlé akce (stejné jako v přehledu souborů)
     public bool $isReparsing      = false;
     public bool $showRenameModal  = false;
@@ -144,6 +147,21 @@ class FileDetailPage extends Component
             $this->useLayerInspect = false;
         }
 
+        // Teploty trysky ze souboru - v dialogu jdou před tiskem změnit
+        $this->nozzleTemps = [];
+        try {
+            $temps = (new \App\Services\GcodePatcherService())->nozzleTemps(
+                storage_path('app/private/' . $this->file->disk_path),
+                $this->selectedPlate,
+                $filaments
+            );
+            foreach ($temps as $i => $t) {
+                $this->nozzleTemps[$i] = $t + ['new_initial' => $t['initial'], 'new_other' => $t['other']];
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Teploty trysky se nepodařilo načíst: ' . $e->getMessage());
+        }
+
         // Výchozí volba = typ podložky, pro který byl soubor naslicovaný
         $this->selectedBedPlate = $this->file->metadata['bed_type_canonical']
             ?? $this->file->metadata['bed_type']
@@ -238,6 +256,71 @@ class FileDetailPage extends Component
         }
     }
 
+    public function resetNozzle(int $i): void
+    {
+        if (isset($this->nozzleTemps[$i])) {
+            $this->nozzleTemps[$i]['new_initial'] = $this->nozzleTemps[$i]['initial'];
+            $this->nozzleTemps[$i]['new_other']   = $this->nozzleTemps[$i]['other'];
+        }
+    }
+
+    /**
+     * Změny teploty trysky pro patcher.
+     * @return array|null ['first' => [°C => °C], 'rest' => [°C => °C], 'insert' => °C|null],
+     *                    prázdné pole = beze změny, null = chyba (zobrazená v toastu)
+     */
+    private function buildNozzleMap(): ?array
+    {
+        $first = $rest = [];
+        $insert = null;
+        $changed = false;
+
+        $add = function (array &$map, int $from, int $to): bool {
+            if (isset($map[$from]) && $map[$from] !== $to) {
+                $this->dispatch('toast', type: 'error',
+                    message: "Víc filamentů má v souboru stejnou teplotu {$from} °C, ale chceš jim nastavit různé – v gcode je nejde rozlišit.");
+                return false;
+            }
+            $map[$from] = $to;
+            return true;
+        };
+
+        foreach ($this->nozzleTemps as $t) {
+            $oldI = (int) $t['initial'];
+            $oldO = (int) $t['other'];
+            $newI = (int) ($t['new_initial'] ?? 0) ?: $oldI;
+            $newO = (int) ($t['new_other'] ?? 0) ?: $oldO;
+
+            foreach ([$newI, $newO] as $v) {
+                if ($v < 150 || $v > 350) {
+                    $this->dispatch('toast', type: 'error', message: "Teplota trysky {$v} °C je mimo rozsah 150–350 °C");
+                    return null;
+                }
+            }
+            if ($newI === $oldI && $newO === $oldO) {
+                continue;
+            }
+            $changed = true;
+
+            if (!$add($first, $oldI, $newI) || !$add($rest, $oldO, $newO)) {
+                return null;
+            }
+
+            // Soubor má 1. i další vrstvy stejně -> slicer na 2. vrstvě
+            // teplotu nenastavuje, appka tam M104 vloží
+            if ($oldI === $oldO && $newI !== $newO) {
+                if (count($this->nozzleTemps) > 1) {
+                    $this->dispatch('toast', type: 'error',
+                        message: 'U vícebarevného tisku jde 1. vrstvu nastavit jinak než ostatní jen tehdy, když ji tak má už soubor ze sliceru.');
+                    return null;
+                }
+                $insert = $newO;
+            }
+        }
+
+        return $changed ? ['first' => $first, 'rest' => $rest, 'insert' => $insert] : [];
+    }
+
     public function confirmPrint(): void
     {
         $printer   = Printer::findOrFail($this->printPrinterId);
@@ -262,6 +345,7 @@ class FileDetailPage extends Component
                 ?? $this->file->metadata['bed_type']
                 ?? '';
 
+            $bed = null;
             if ($this->selectedBedPlate && $this->selectedBedPlate !== $originalBedType) {
                 $options = $this->file->metadata['bed_temp_options'] ?? [];
                 $to      = $options[$this->selectedBedPlate] ?? null;
@@ -270,21 +354,28 @@ class FileDetailPage extends Component
                     'initial' => (int) ($this->file->metadata['bed_temp_initial_layer'] ?? 0),
                     'other'   => (int) ($this->file->metadata['bed_temp'] ?? 0),
                 ];
-
                 if ($to && (int) $from['initial'] > 0) {
-                    $patcher     = new \App\Services\GcodePatcherService();
-                    $patchedPath = $patcher->patchForBedPlate(
-                        $localPath,
-                        $this->selectedPlate,
-                        $originalBedType,
-                        $this->selectedBedPlate,
-                        $from,
-                        $to,
-                        $this->file->metadata['printer_model'] ?? null,
-                    );
-                    $uploadPath = $patchedPath;
-                    \Log::info('Gcode upraven pro podložku ' . $this->selectedBedPlate . ': ' . implode('; ', $patcher->notes));
+                    $bed = ['fromPlate' => $originalBedType, 'toPlate' => $this->selectedBedPlate, 'from' => $from, 'to' => $to];
                 }
+            }
+
+            // Změněná teplota trysky (1. vrstva a další vrstvy zvlášť)
+            $nozzleMap = $this->buildNozzleMap();
+            if ($nozzleMap === null) {
+                return; // chyba už je v toastu
+            }
+
+            if ($bed || $nozzleMap) {
+                $patcher     = new \App\Services\GcodePatcherService();
+                $patchedPath = $patcher->patch(
+                    $localPath,
+                    $this->selectedPlate,
+                    $bed,
+                    $nozzleMap,
+                    $this->file->metadata['printer_model'] ?? null,
+                );
+                $uploadPath = $patchedPath;
+                \Log::info('Gcode upraven před tiskem: ' . implode('; ', $patcher->notes));
             }
 
             // Smazat starý soubor před nahráním nového - bez tohoto kroku

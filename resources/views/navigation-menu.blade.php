@@ -52,6 +52,10 @@
                                 class="flex items-center space-x-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-4 {{ request()->routeIs('modules.settings') ? 'font-semibold text-green-700 dark:text-bambu-green' : '' }}">
                                 <span>🧩</span><span>Moduly</span>
                             </a>
+                            <a href="{{ route('general.settings') }}"
+                                class="flex items-center space-x-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-4 {{ request()->routeIs('general.settings') ? 'font-semibold text-green-700 dark:text-bambu-green' : '' }}">
+                                <span>⚙️</span><span>Obecné</span>
+                            </a>
                             <a href="{{ route('versions.settings') }}"
                                 class="flex items-center space-x-2.5 px-4 py-2.5 text-sm text-gray-700 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-4 {{ request()->routeIs('versions.settings') ? 'font-semibold text-green-700 dark:text-bambu-green' : '' }}">
                                 <span>🏷️</span><span>Verze a zálohy</span>
@@ -142,6 +146,7 @@
             <a href="{{ route('printers.manage') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">⚙️ Správa tiskáren</a>
             <a href="{{ route('notifications.settings') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">🔔 Notifikace</a>
             <a href="{{ route('modules.settings') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">🧩 Moduly</a>
+            <a href="{{ route('general.settings') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">⚙️ Obecné</a>
             <a href="{{ route('versions.settings') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-bambu-text hover:bg-gray-50 dark:hover:bg-bambu-dark-3">🏷️ Verze a zálohy</a>
         </div>
         <div class="border-t border-gray-100 dark:border-bambu-dark-4 p-3 space-y-1">
