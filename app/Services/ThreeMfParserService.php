@@ -255,8 +255,20 @@ class ThreeMfParserService
                 $metadata['printer_model']        = $json['printer_model'] ?? null;
                 $metadata['layer_height']         = $json['layer_height'] ?? null;
                 $metadata['initial_layer_height'] = $json['initial_layer_print_height'] ?? null;
-                $metadata['nozzle_temp']          = $json['nozzle_temperature'][0] ?? null;
-                $metadata['nozzle_temp_initial_layer'] = $json['nozzle_temperature_initial_layer'][0] ?? $metadata['nozzle_temp'];
+                // Teplota trysky - pole po filamentech projektu; bere se
+                // filament, který deska skutečně používá (ne první v projektu)
+                $nt  = (array) ($json['nozzle_temperature'] ?? []);
+                $nti = (array) ($json['nozzle_temperature_initial_layer'] ?? []);
+                foreach ($metadata['plates'] ?? [] as $pi => $pl) {
+                    $ex = $pl['filaments'][0]['extruder_index'] ?? null;
+                    if ($ex !== null && isset($nt[$ex])) {
+                        $metadata['plates'][$pi]['nozzle_temp']               = (int) $nt[$ex];
+                        $metadata['plates'][$pi]['nozzle_temp_initial_layer'] = (int) ($nti[$ex] ?? $nt[$ex]);
+                    }
+                }
+                $firstPlate = $metadata['plates'][0] ?? [];
+                $metadata['nozzle_temp']               = $firstPlate['nozzle_temp'] ?? ($nt[0] ?? null);
+                $metadata['nozzle_temp_initial_layer'] = $firstPlate['nozzle_temp_initial_layer'] ?? ($nti[0] ?? $metadata['nozzle_temp']);
                 $metadata['support_type']         = $json['support_type'] ?? null;
                 $metadata['spiral_mode']          = ($json['spiral_mode'] ?? '0') === '1';
                 $metadata['infill_density']       = $json['sparse_infill_density'] ?? null;

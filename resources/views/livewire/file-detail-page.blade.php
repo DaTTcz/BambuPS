@@ -95,12 +95,16 @@
                                     <p class="text-sm font-semibold text-gray-700 mt-0.5">🔢 {{ $currentPlate['total_layer_num'] }}</p>
                                 </div>
                             @endif
-                            @if(!empty($file->metadata['nozzle_temp']))
+                            @php
+                                $nzTemp    = $currentPlate['nozzle_temp'] ?? $file->metadata['nozzle_temp'] ?? null;
+                                $nzInitial = $currentPlate['nozzle_temp_initial_layer'] ?? $file->metadata['nozzle_temp_initial_layer'] ?? null;
+                            @endphp
+                            @if(!empty($nzTemp))
                                 <div class="bg-gray-50 rounded-lg p-3">
                                     <p class="text-xs text-gray-400">Teplota trysky</p>
-                                    <p class="text-sm font-semibold text-gray-700 mt-0.5">🌡️ {{ $file->metadata['nozzle_temp'] }}°C
-                                        @if(!empty($file->metadata['nozzle_temp_initial_layer']))
-                                            <span class="text-xs text-gray-400 font-normal">/ první vrstva {{ $file->metadata['nozzle_temp_initial_layer'] }}°C</span>
+                                    <p class="text-sm font-semibold text-gray-700 mt-0.5">🌡️ {{ $nzTemp }}°C
+                                        @if(!empty($nzInitial))
+                                            <span class="text-xs text-gray-400 font-normal">/ první vrstva {{ $nzInitial }}°C</span>
                                         @endif
                                     </p>
                                 </div>

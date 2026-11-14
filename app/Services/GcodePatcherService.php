@@ -124,16 +124,36 @@ class GcodePatcherService
         if ($zip->open($sourcePath) !== true) {
             return [];
         }
-        $settings = json_decode((string) $zip->getFromName('Metadata/project_settings.config'), true) ?: [];
-        $gcode    = $zip->getFromName("Metadata/plate_{$plateIndex}.gcode");
+        $settings  = json_decode((string) $zip->getFromName('Metadata/project_settings.config'), true) ?: [];
+        $gcode     = $zip->getFromName("Metadata/plate_{$plateIndex}.gcode");
+        $sliceInfo = $zip->getFromName('Metadata/slice_info.config');
         $zip->close();
+
+        // Indexy filamentů desky přímo ze slice_info (metadata starších
+        // souborů extruder_index nemají -> brala by se teplota 1. filamentu)
+        $ids = [];
+        if ($sliceInfo !== false && ($xml = @simplexml_load_string($sliceInfo))) {
+            foreach ($xml->plate as $plate) {
+                $idx = null;
+                foreach ($plate->metadata as $m) {
+                    if ((string) $m['key'] === 'index') {
+                        $idx = (int) $m['value'];
+                    }
+                }
+                if ($idx === $plateIndex) {
+                    foreach ($plate->filament as $f) {
+                        $ids[] = ((int) $f['id']) - 1;
+                    }
+                }
+            }
+        }
 
         $other   = (array) ($settings['nozzle_temperature'] ?? []);
         $initial = (array) ($settings['nozzle_temperature_initial_layer'] ?? []);
 
         $result = [];
         foreach (array_values($filaments) as $i => $f) {
-            $idx = (int) ($f['extruder_index'] ?? $i);
+            $idx = (int) ($ids[$i] ?? $f['extruder_index'] ?? $i);
             $o   = (int) ($other[$idx] ?? 0);
             $in  = (int) ($initial[$idx] ?? $o);
             if ($o > 0) {
@@ -144,7 +164,8 @@ class GcodePatcherService
         // Fallback z gcode - jen u jednoho filamentu, u víc nejde přiřadit
         if (!$result && $gcode !== false && count($filaments) <= 1) {
             $split = $this->findFirstLayerOffset($gcode) ?? strlen($gcode);
-            $in = preg_match('/^M109 S(\d+)/m', substr($gcode, 0, $split), $m) ? (int) $m[1] : 0;
+            // Poslední M109 před 1. vrstvou (dřívější bývají teploty pro čištění trysky)
+            $in = preg_match_all('/^M109 S(\d+)/m', substr($gcode, 0, $split), $m) ? (int) end($m[1]) : 0;
             $o  = preg_match('/^M104 S([1-9]\d*)/m', substr($gcode, $split), $m2) ? (int) $m2[1] : $in;
             if ($in > 0) {
                 $result[0] = ['initial' => $in, 'other' => $o ?: $in];
