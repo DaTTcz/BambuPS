@@ -49,6 +49,16 @@ class FileDetailPage extends Component
 
     public function mount(File $file): void
     {
+        // Metadata ze starší verze parseru -> potichu načíst znovu
+        if ((int) ($file->metadata['parser_version'] ?? 0) < \App\Services\ThreeMfParserService::VERSION) {
+            try {
+                (new \App\Services\FileReparseService())->reparse($file);
+                $file->refresh();
+            } catch (\Throwable $e) {
+                \Log::warning("Automatické znovunačtení souboru {$file->id} selhalo: " . $e->getMessage());
+            }
+        }
+
         $this->file = $file;
         $plates = $file->metadata['plates'] ?? [];
         if (!empty($plates)) {
@@ -502,56 +512,12 @@ class FileDetailPage extends Component
     public function reparseCurrentFile(): void
     {
         $this->isReparsing = true;
-        $fullPath = storage_path('app/private/' . $this->file->disk_path);
-
-        if (!file_exists($fullPath)) {
-            $this->isReparsing = false;
-            $this->dispatch('toast', type: 'error', message: 'Soubor nenalezen na disku.');
-            return;
-        }
-
-        $extension = strtolower(pathinfo($this->file->disk_path, PATHINFO_EXTENSION));
-        if ($extension === '3mf') {
-            $metadata = (new \App\Services\ThreeMfParserService())->parse($fullPath);
-        } else {
-            $metadata = (new \App\Services\GcodeParserService())->parse($fullPath);
-        }
-
-        if (!empty($metadata['thumbnail_data'])) {
-            if ($this->file->thumbnail_path) {
-                \Illuminate\Support\Facades\Storage::disk('local')->delete($this->file->thumbnail_path);
-            }
-            $thumbName     = \Illuminate\Support\Str::uuid() . '.png';
-            $thumbnailPath = 'thumbnails/' . $thumbName;
-            \Illuminate\Support\Facades\Storage::disk('local')->put($thumbnailPath, base64_decode($metadata['thumbnail_data']));
-            unset($metadata['thumbnail_data']);
-            $this->file->thumbnail_path = $thumbnailPath;
-        }
-
-        if (!empty($metadata['plates'])) {
-            if (!empty($this->file->metadata['plates'])) {
-                foreach ($this->file->metadata['plates'] as $oldPlate) {
-                    if (!empty($oldPlate['thumbnail_path'])) {
-                        \Illuminate\Support\Facades\Storage::disk('local')->delete($oldPlate['thumbnail_path']);
-                    }
-                }
-            }
-            foreach ($metadata['plates'] as $i => $plate) {
-                if (!empty($plate['thumbnail_data'])) {
-                    $plateThumbName = \Illuminate\Support\Str::uuid() . '.png';
-                    $plateThumbPath = 'thumbnails/' . $plateThumbName;
-                    \Illuminate\Support\Facades\Storage::disk('local')->put($plateThumbPath, base64_decode($plate['thumbnail_data']));
-                    $metadata['plates'][$i]['thumbnail_path'] = $plateThumbPath;
-                    unset($metadata['plates'][$i]['thumbnail_data']);
-                }
-            }
-        }
-
-        $this->file->metadata = $metadata;
-        $this->file->save();
+        $ok = (new \App\Services\FileReparseService())->reparse($this->file);
         $this->file->refresh();
         $this->isReparsing = false;
-        $this->dispatch('toast', type: 'success', message: 'Parsování dokončeno.');
+
+        $this->dispatch('toast', type: $ok ? 'success' : 'error',
+            message: $ok ? 'Parsování dokončeno.' : 'Soubor nenalezen na disku.');
     }
 
     public function startRename(): void

@@ -6,6 +6,13 @@ use ZipArchive;
 
 class ThreeMfParserService
 {
+    /**
+     * Verze parsování - zvýšit při každé změně, která mění uložená metadata.
+     * Soubory se starší verzí se znovu načtou (bambups:reparse po aktualizaci,
+     * případně při otevření detailu souboru).
+     */
+    public const VERSION = 2;
+
     public function parse(string $filePath): array
     {
         $zip = new ZipArchive();
@@ -257,18 +264,17 @@ class ThreeMfParserService
                 $metadata['initial_layer_height'] = $json['initial_layer_print_height'] ?? null;
                 // Teplota trysky - pole po filamentech projektu; bere se
                 // filament, který deska skutečně používá (ne první v projektu)
-                $nt  = (array) ($json['nozzle_temperature'] ?? []);
-                $nti = (array) ($json['nozzle_temperature_initial_layer'] ?? []);
                 foreach ($metadata['plates'] ?? [] as $pi => $pl) {
                     $ex = $pl['filaments'][0]['extruder_index'] ?? null;
-                    if ($ex !== null && isset($nt[$ex])) {
-                        $metadata['plates'][$pi]['nozzle_temp']               = (int) $nt[$ex];
-                        $metadata['plates'][$pi]['nozzle_temp_initial_layer'] = (int) ($nti[$ex] ?? $nt[$ex]);
+                    if ($ex !== null && ($t = \App\Services\GcodePatcherService::filamentNozzleTemps($json, (int) $ex))) {
+                        $metadata['plates'][$pi]['nozzle_temp']               = $t['other'];
+                        $metadata['plates'][$pi]['nozzle_temp_initial_layer'] = $t['initial'];
                     }
                 }
                 $firstPlate = $metadata['plates'][0] ?? [];
-                $metadata['nozzle_temp']               = $firstPlate['nozzle_temp'] ?? ($nt[0] ?? null);
-                $metadata['nozzle_temp_initial_layer'] = $firstPlate['nozzle_temp_initial_layer'] ?? ($nti[0] ?? $metadata['nozzle_temp']);
+                $t0 = \App\Services\GcodePatcherService::filamentNozzleTemps($json, 0);
+                $metadata['nozzle_temp']               = $firstPlate['nozzle_temp'] ?? $t0['other'] ?? null;
+                $metadata['nozzle_temp_initial_layer'] = $firstPlate['nozzle_temp_initial_layer'] ?? $t0['initial'] ?? null;
                 $metadata['support_type']         = $json['support_type'] ?? null;
                 $metadata['spiral_mode']          = ($json['spiral_mode'] ?? '0') === '1';
                 $metadata['infill_density']       = $json['sparse_infill_density'] ?? null;
@@ -300,14 +306,21 @@ class ThreeMfParserService
                     'textured cool plate'                  => 'textured_cool_plate_temp',
                 ];
 
+                // Teploty podložky jsou pole po filamentech - bereme filament
+                // 1. desky (ne první filament projektu)
+                $fi = (int) ($metadata['plates'][0]['filaments'][0]['extruder_index'] ?? 0);
+                if (!isset($json['hot_plate_temp'][$fi]) && !isset($json['textured_plate_temp'][$fi])) {
+                    $fi = 0;
+                }
+
                 $bedKey = $bedTypeAliases[strtolower(trim($bedType))] ?? null;
 
-                if ($bedKey && isset($json[$bedKey][0])) {
-                    $metadata['bed_temp'] = $json[$bedKey][0];
+                if ($bedKey && isset($json[$bedKey][$fi])) {
+                    $metadata['bed_temp'] = $json[$bedKey][$fi];
                     // Teplota podložky pro PRVNÍ vrstvu - stejný princip
                     // jako u výšky vrstvy (bed_temp = ustálená hodnota pro
                     // zbytek tisku, bed_temp_initial_layer = jen 1. vrstva).
-                    $metadata['bed_temp_initial_layer'] = $json[$bedKey . '_initial_layer'][0] ?? $metadata['bed_temp'];
+                    $metadata['bed_temp_initial_layer'] = $json[$bedKey . '_initial_layer'][$fi] ?? $metadata['bed_temp'];
                 } else {
                     // Neznámý/nový typ podložky - zkusíme přímý odvozený
                     // klíč, jinak necháme prázdné (radši nic než tichá
@@ -315,8 +328,8 @@ class ThreeMfParserService
                     $fallbackKey = strtolower(trim($bedType));
                     $fallbackKey = preg_replace('/[^a-z0-9]+/', '_', $fallbackKey);
                     $fallbackKey = trim($fallbackKey, '_') . '_temp';
-                    $metadata['bed_temp'] = $json[$fallbackKey][0] ?? null;
-                    $metadata['bed_temp_initial_layer'] = $json[$fallbackKey . '_initial_layer'][0] ?? $metadata['bed_temp'];
+                    $metadata['bed_temp'] = $json[$fallbackKey][$fi] ?? null;
+                    $metadata['bed_temp_initial_layer'] = $json[$fallbackKey . '_initial_layer'][$fi] ?? $metadata['bed_temp'];
 		}
 
                 // Čistý seznam pro NABÍDKU (dropdown) - přesně jeden
@@ -334,11 +347,11 @@ class ThreeMfParserService
                 $bedTempOptions = [];
                 $canonicalLabelForCurrent = null;
                 foreach ($canonicalBedTypes as $label => $key) {
-                    if (isset($json[$key][0])) {
+                    if (isset($json[$key][$fi])) {
                         // initial = 1. vrstva (*_initial_layer), other = ostatní vrstvy
                         $bedTempOptions[$label] = [
-                            'initial' => (int) ($json[$key . '_initial_layer'][0] ?? $json[$key][0]),
-                            'other'   => (int) $json[$key][0],
+                            'initial' => (int) ($json[$key . '_initial_layer'][$fi] ?? $json[$key][$fi]),
+                            'other'   => (int) $json[$key][$fi],
                         ];
                     }
                     // Zjistíme, který kanonický popisek odpovídá souborem
@@ -356,6 +369,8 @@ class ThreeMfParserService
 	}
 
         $zip->close();
+
+        $metadata['parser_version'] = self::VERSION;
 
         return array_filter($metadata, fn($v) => $v !== null && $v !== '');
     }

@@ -196,7 +196,10 @@ class UpdateService
             'composer' => 'composer install --no-dev --optimize-autoloader --no-interaction 2>&1',
             // npm ci instaluje přesně podle package-lock.json a nepřepisuje ho.
             'npm'      => 'npm ci --no-audit --no-fund 2>&1 && npm run build 2>&1',
-            'migrate'  => 'php artisan migrate --force 2>&1',
+            // Po migraci znovu načíst metadata souborů, pokud se změnil parser
+            // (příkaz má jen novější verze - u návratu na starší se přeskočí)
+            'migrate'  => 'php artisan migrate --force 2>&1'
+                . ' && { php artisan list --raw 2>/dev/null | grep -q "^bambups:reparse" && php artisan bambups:reparse 2>&1 || true; }',
             'cache'    => 'php artisan config:clear 2>&1 && php artisan cache:clear 2>&1 && php artisan view:clear 2>&1',
             // Démoni pod supervisorem (MQTT listener, camera:capture) drží kód
             // v paměti - bez restartu by dál jeli se starou verzí. Restartujeme

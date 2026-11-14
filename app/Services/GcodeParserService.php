@@ -187,6 +187,8 @@ class GcodeParserService
             $metadata['plate_count'] = 1;
         }
 
+        $metadata['parser_version'] = ThreeMfParserService::VERSION;
+
         return array_filter($metadata, fn($v) => $v !== null && $v !== '' && $v !== false);
     }
 
