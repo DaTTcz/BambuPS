@@ -39,7 +39,10 @@
                             ? $m['layer_height'] . ' mm' . (!empty($m['initial_layer_height']) ? ' (1. vrstva ' . $m['initial_layer_height'] . ' mm)' : '')
                             : null,
         'Vrstev'       => $layers ?: null,
-        'Teplota trysky' => !empty($m['nozzle_temp']) ? $m['nozzle_temp'] . ' °C' : null,
+        'Teplota trysky' => !empty($m['nozzle_temp'])
+            ? $m['nozzle_temp'] . ' °C' . (!empty($m['nozzle_temp_initial_layer'])
+                ? ' (1. vrstva ' . $m['nozzle_temp_initial_layer'] . ' °C)' : '')
+            : null,
         'Podložka'     => $bedType
                             ? $bedType . (!empty($m['bed_temp']) ? ' · ' . $m['bed_temp'] . ' °C' : '')
                             : null,
