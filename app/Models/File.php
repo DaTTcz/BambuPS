@@ -41,9 +41,7 @@ class File extends Model
     /** Eager-load historie pro hover v přehledu souborů (bez N+1 dotazů) */
     public static function withPrintHistory(): array
     {
-        return ['printJobs' => fn ($q) => $q->select('id', 'file_id', 'printer_id', 'status', 'started_at', 'created_at')
-            ->latest('id')
-            ->with('printer:id,name')];
+        return ['printJobs' => fn ($q) => $q->select('id', 'file_id', 'status')];
     }
 
     public function getSizeFormattedAttribute(): string
