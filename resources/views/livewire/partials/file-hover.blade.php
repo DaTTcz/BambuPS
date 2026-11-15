@@ -59,6 +59,17 @@
         'Velikost'     => $file->size_formatted,
         'Nahráno'      => $file->created_at?->local()->format('d.m.Y H:i'),
     ], fn ($v) => $v !== null && $v !== '');
+
+    // Historie tisku (načtená předem přes File::withPrintHistory())
+    $hoverJobs = $file->relationLoaded('printJobs') ? $file->printJobs : collect();
+    $jobIcons  = [
+        \App\Models\PrintJob::STATUS_FINISHED  => '✅',
+        \App\Models\PrintJob::STATUS_FAILED    => '❌',
+        \App\Models\PrintJob::STATUS_CANCELLED => '⏹',
+        \App\Models\PrintJob::STATUS_RUNNING   => '🖨️',
+        \App\Models\PrintJob::STATUS_QUEUED    => '⏳',
+    ];
+    $jobCounts = $hoverJobs->countBy('status');
 @endphp
 <div x-ref="pop" x-show="open" x-cloak
     x-transition.opacity.duration.150ms
@@ -95,6 +106,31 @@
                     @endif
                 </div>
             @endforeach
+        </div>
+    @endif
+
+    @if($file->relationLoaded('printJobs'))
+        <div class="px-3 py-2 border-b border-gray-100 dark:border-bambu-dark-4 text-xs">
+            @if($hoverJobs->isEmpty())
+                <p class="text-gray-400 dark:text-bambu-text-dim">🕘 Zatím netisknuto</p>
+            @else
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-gray-700 dark:text-bambu-text font-medium">🕘 Tisknuto {{ $hoverJobs->count() }}×</span>
+                    <span class="text-gray-500 dark:text-bambu-text-dim whitespace-nowrap">
+                        @foreach($jobIcons as $st => $icon)
+                            @if($jobCounts[$st] ?? 0) <span class="ml-1">{{ $icon }} {{ $jobCounts[$st] }}</span> @endif
+                        @endforeach
+                    </span>
+                </div>
+                <div class="mt-1 space-y-0.5">
+                    @foreach($hoverJobs->take(3) as $job)
+                        <div class="flex items-center justify-between gap-2 text-gray-500 dark:text-bambu-text-dim">
+                            <span class="truncate">{{ $jobIcons[$job->status] ?? '•' }} {{ $job->printer?->name ?? '?' }}</span>
+                            <span class="shrink-0">{{ ($job->started_at ?? $job->created_at)?->local()->format('d.m.Y H:i') }}</span>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
         </div>
     @endif
 

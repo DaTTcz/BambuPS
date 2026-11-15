@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class File extends Model
 {
@@ -30,6 +31,19 @@ class File extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function printJobs(): HasMany
+    {
+        return $this->hasMany(PrintJob::class);
+    }
+
+    /** Eager-load historie pro hover v přehledu souborů (bez N+1 dotazů) */
+    public static function withPrintHistory(): array
+    {
+        return ['printJobs' => fn ($q) => $q->select('id', 'file_id', 'printer_id', 'status', 'started_at', 'created_at')
+            ->latest('id')
+            ->with('printer:id,name')];
     }
 
     public function getSizeFormattedAttribute(): string

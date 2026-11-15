@@ -89,7 +89,7 @@ class FileManager extends Component
         if ($this->search) {
             $query->where('original_name', 'like', '%' . $this->search . '%');
         }
-        return $query->orderBy($this->sortBy, $this->sortDir)->get();
+        return $query->with(File::withPrintHistory())->orderBy($this->sortBy, $this->sortDir)->get();
     }
 
     public function getAllFoldersProperty()

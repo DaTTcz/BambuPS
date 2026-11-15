@@ -20,6 +20,7 @@ class Dashboard extends Component
     public function getRecentFilesProperty()
     {
         return File::where('user_id', auth()->id())
+            ->with(File::withPrintHistory())
             ->orderBy('created_at', 'desc')
             ->limit(8)
             ->get();
