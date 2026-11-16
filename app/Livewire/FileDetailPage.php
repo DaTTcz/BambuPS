@@ -266,6 +266,43 @@ class FileDetailPage extends Component
         }
     }
 
+    /**
+     * Čitelný popis toho, co se před tiskem změnilo oproti souboru
+     * (ukládá se do historie tisku).
+     */
+    private function describeOverrides(?array $bed): array
+    {
+        $out = [];
+
+        if ($bed) {
+            $out[] = sprintf('Podložka: %s (%d °C) → %s (%d °C)',
+                $bed['fromPlate'] ?: '?', (int) ($bed['from']['other'] ?? 0),
+                $bed['toPlate'], (int) ($bed['to']['other'] ?? 0));
+        }
+
+        $plate     = collect($this->file->metadata['plates'] ?? [])->firstWhere('index', $this->selectedPlate) ?? [];
+        $filaments = array_values($plate['filaments'] ?? []);
+        foreach ($this->nozzleTemps as $i => $t) {
+            $parts = [];
+            $newI  = (int) ($t['new_initial'] ?? 0) ?: (int) $t['initial'];
+            $newO  = (int) ($t['new_other'] ?? 0) ?: (int) $t['other'];
+            if ($newI !== (int) $t['initial']) {
+                $parts[] = "1. vrstva {$t['initial']} → {$newI} °C";
+            }
+            if ($newO !== (int) $t['other']) {
+                $parts[] = "další vrstvy {$t['other']} → {$newO} °C";
+            }
+            if ($parts) {
+                $label = count($this->nozzleTemps) > 1 && isset($filaments[$i])
+                    ? 'Tryska (filament ' . ($i + 1) . ' ' . ($filaments[$i]['type'] ?? '?') . ')'
+                    : 'Tryska';
+                $out[] = $label . ': ' . implode(', ', $parts);
+            }
+        }
+
+        return $out;
+    }
+
     public function resetNozzle(int $i): void
     {
         if (isset($this->nozzleTemps[$i])) {
@@ -445,7 +482,16 @@ class FileDetailPage extends Component
                     PrintHistoryService::queue(
                         $printer, $this->file, $this->selectedPlate, $cmd->lastTaskId, auth()->id(),
                         $this->selectedBedPlate ?: ($this->file->metadata['bed_type'] ?? null),
-                        $this->selectedBedTemp()
+                        $this->selectedBedTemp(),
+                        $this->describeOverrides($bed),
+                        [
+                            'bed_leveling'   => $this->useBedLeveling,
+                            'timelapse'      => $this->useTimelapse,
+                            'flow_cali'      => $this->useFlowCali,
+                            'layer_inspect'  => $this->useLayerInspect,
+                            'vibration_cali' => $this->useVibrationCali,
+                            'use_ams'        => $this->useAms,
+                        ],
                     );
                 } catch (\Throwable $e) {
                     \Log::error('Historie tisku (queue): ' . $e->getMessage());

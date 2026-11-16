@@ -125,6 +125,13 @@
                                     </span>
                                 @endif
                             </div>
+                            @if($job->overrides)
+                                <p class="text-xs text-amber-600 dark:text-amber-400 mt-0.5 truncate"
+                                    title="Změněno před tiskem: {{ implode(' | ', $job->overrides) }}">✏️ {{ implode(' · ', $job->overrides) }}</p>
+                            @endif
+                            @if($job->options_summary)
+                                <p class="text-xs text-gray-400 dark:text-bambu-text-dim mt-0.5 truncate">⚙️ {{ implode(' · ', $job->options_summary) }}</p>
+                            @endif
                             @if($job->status === 'failed' && $hmsCodes->isNotEmpty())
                                 <p class="text-xs text-red-500 dark:text-red-400 mt-0.5 truncate" title="{{ $hmsCodes->implode(' | ') }}">⚠ {{ $hmsCodes->first() }}</p>
                             @endif

@@ -274,9 +274,12 @@
                             <span class="w-10 h-8 shrink-0 rounded bg-gray-100 dark:bg-bambu-dark-3 flex items-center justify-center">🖨️</span>
                         @endif
                         <span class="text-gray-700 dark:text-bambu-text w-28 shrink-0">{{ $job->started_at?->local()->format('d.m.Y H:i') ?? '–' }}</span>
-                        <span class="text-gray-500 dark:text-bambu-text-dim truncate flex-1">
+                        <span class="text-gray-500 dark:text-bambu-text-dim truncate flex-1 min-w-0">
                             {{ $job->printer?->name ?? $job->printer_name ?? '–' }}
                             @if($job->plate_index && count($plates) > 1) · deska {{ $job->plate_index }} @endif
+                            @if($job->overrides)
+                                <span class="block truncate text-amber-600 dark:text-amber-400" title="{{ implode(' | ', $job->overrides) }}">✏️ {{ implode(' · ', $job->overrides) }}</span>
+                            @endif
                         </span>
                         <span class="text-gray-500 dark:text-bambu-text-dim shrink-0 hidden sm:inline">
                             ⏱ {{ \App\Models\PrintJob::formatSeconds($job->duration) }}

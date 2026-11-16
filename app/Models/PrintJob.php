@@ -23,7 +23,7 @@ class PrintJob extends Model
         'source', 'task_id', 'status',
         'started_at', 'ended_at', 'duration_seconds', 'estimated_seconds',
         'progress', 'layer_reached', 'total_layers',
-        'filament_g', 'filaments',
+        'filament_g', 'filaments', 'overrides', 'options',
         'print_error', 'hms', 'snapshot_path',
     ];
 
@@ -31,6 +31,8 @@ class PrintJob extends Model
         'started_at' => 'datetime',
         'ended_at'   => 'datetime',
         'filaments'  => 'array',
+        'overrides'  => 'array',
+        'options'    => 'array',
         'hms'        => 'array',
         'filament_g' => 'float',
         'bed_leveled' => 'boolean',
@@ -85,6 +87,33 @@ class PrintJob extends Model
         $m = intdiv($seconds % 3600, 60);
         if ($h > 0) return "{$h}h " . str_pad((string) $m, 2, '0', STR_PAD_LEFT) . 'm';
         return max($m, 0) . 'm';
+    }
+
+    /** Volby tisku čitelně, např. ['vyrovnání podložky: ne', 'timelapse'] */
+    public function getOptionsSummaryAttribute(): array
+    {
+        $o = $this->options ?? [];
+        if (!$o) {
+            return [];
+        }
+        $out = [];
+        if (array_key_exists('bed_leveling', $o)) {
+            $out[] = 'vyrovnání podložky: ' . ($o['bed_leveling'] ? 'ano' : 'ne');
+        }
+        foreach ([
+            'flow_cali'      => 'kalibrace průtoku',
+            'layer_inspect'  => 'kontrola 1. vrstvy',
+            'vibration_cali' => 'kalibrace vibrací',
+            'timelapse'      => 'timelapse',
+        ] as $key => $label) {
+            if (!empty($o[$key])) {
+                $out[] = $label;
+            }
+        }
+        if (array_key_exists('use_ams', $o) && !$o['use_ams']) {
+            $out[] = 'bez AMS';
+        }
+        return $out;
     }
 
     public function getStatusLabelAttribute(): string
