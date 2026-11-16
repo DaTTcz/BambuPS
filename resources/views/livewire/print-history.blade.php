@@ -86,10 +86,16 @@
 
                         {{-- Náhled: snímek z kamery na konci, jinak náhled desky --}}
                         <div class="w-16 h-12 shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-bambu-dark-3 flex items-center justify-center">
-                            @if($job->thumbnail_url)
-                                <a href="{{ $job->thumbnail_url }}" target="_blank" class="block w-full h-full">
-                                    <img src="{{ $job->thumbnail_url }}" loading="lazy"
-                                        class="w-full h-full {{ $job->snapshot_path ? 'object-cover' : 'object-contain' }}" alt="náhled">
+                            @php $thumbs = $job->thumbnailUrls(); @endphp
+                            @if($thumbs)
+                                {{-- Když se náhled nenačte, zkusí se další (snímek -> deska -> soubor); nakonec ikonka.
+                                     Klik otevře zvětšený obrázek v okně (Ctrl+klik = nový tab) --}}
+                                <a x-data="{ urls: @js($thumbs), i: 0 }" :href="urls[i]" target="_blank" class="block w-full h-full cursor-zoom-in"
+                                    x-on:click="if (!$event.ctrlKey && !$event.metaKey && i < urls.length) { $event.preventDefault(); $dispatch('open-lightbox', { src: urls[i], title: @js($job->name . ' · ' . ($job->started_at?->local()->format('d.m.Y H:i') ?? '')) }) }">
+                                    <img x-show="i < urls.length" :src="urls[i]" loading="lazy" x-on:error="i++"
+                                        :class="i === 0 && {{ $job->snapshot_path ? 'true' : 'false' }} ? 'object-cover' : 'object-contain'"
+                                        class="w-full h-full" alt="">
+                                    <span x-show="i >= urls.length" x-cloak class="w-full h-full flex items-center justify-center text-xl">🖨️</span>
                                 </a>
                             @else
                                 <span class="text-xl">🖨️</span>
@@ -204,4 +210,5 @@
         </div>
     @endif
 
+    @include('livewire.partials.image-lightbox')
 </div>

@@ -267,7 +267,8 @@
                     @endphp
                     <div wire:key="fph-{{ $job->id }}" class="px-4 py-2 flex items-center gap-3 text-xs">
                         @if($job->snapshot_path)
-                            <a href="{{ route('history.snapshot', $job->id) }}" target="_blank" class="w-10 h-8 shrink-0 rounded overflow-hidden bg-gray-100 dark:bg-bambu-dark-3">
+                            <a href="{{ route('history.snapshot', $job->id) }}" target="_blank" class="w-10 h-8 shrink-0 rounded overflow-hidden bg-gray-100 dark:bg-bambu-dark-3 cursor-zoom-in"
+                                x-data x-on:click="if (!$event.ctrlKey && !$event.metaKey) { $event.preventDefault(); $dispatch('open-lightbox', { src: @js(route('history.snapshot', $job->id)), title: @js($job->started_at?->local()->format('d.m.Y H:i') . ' · ' . ($job->printer?->name ?? $job->printer_name ?? '')) }) }">
                                 <img src="{{ route('history.snapshot', $job->id) }}" loading="lazy" class="w-full h-full object-cover" alt="snímek">
                             </a>
                         @else
@@ -619,4 +620,5 @@
         </div>
     @endif
 
+    @include('livewire.partials.image-lightbox')
 </div>
