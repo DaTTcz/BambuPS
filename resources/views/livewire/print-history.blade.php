@@ -140,7 +140,8 @@
                         {{-- Čísla --}}
                         <div class="hidden md:block text-right text-xs shrink-0 w-28">
                             <p class="text-gray-700 dark:text-bambu-text">⏱ {{ \App\Models\PrintJob::formatSeconds($dur) }}</p>
-                            @if($job->estimated_seconds)
+                            {{-- Odhad jen u běžícího tisku, u skončeného platí skutečný čas --}}
+                            @if($job->estimated_seconds && $job->isOpen())
                                 <p class="text-gray-400 dark:text-bambu-text-dim">odhad {{ \App\Models\PrintJob::formatSeconds($job->estimated_seconds) }}</p>
                             @endif
                         </div>
