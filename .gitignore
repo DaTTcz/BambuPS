@@ -25,3 +25,6 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Pracovní výstupy (poznámky k vydání apod.) - necommitovat
+/Claude outputs/
