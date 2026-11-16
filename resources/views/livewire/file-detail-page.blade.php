@@ -287,6 +287,12 @@
                             @if($job->status !== 'finished' && $job->progress !== null) · {{ $job->progress }} % @endif
                         </span>
                         <span class="shrink-0 px-2 py-0.5 rounded-full font-medium {{ $badge }}">{{ $job->status_label }}</span>
+                        @if($job->printer_id && !$job->isOpen())
+                            <button type="button" wire:click="reprint({{ $job->id }})" title="Tisknout znovu se stejným nastavením"
+                                class="shrink-0 px-2 py-0.5 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-bambu-green hover:bg-green-100 dark:hover:bg-green-900/40 font-medium">🔁 Znovu</button>
+                        @else
+                            <span class="shrink-0 w-16"></span>
+                        @endif
                     </div>
                 @endforeach
             </div>

@@ -166,6 +166,12 @@
                             {{ $job->status_label }}
                         </span>
 
+                        @if(!$job->isOpen() && $job->printer_id && $job->file && $job->file->user_id === auth()->id())
+                            <a href="{{ route('file.show', [$job->file->id, 'reprint' => $job->id]) }}" title="Tisknout znovu se stejným nastavením"
+                                class="shrink-0 p-1 text-gray-400 hover:text-green-600 text-sm transition-colors">🔁</a>
+                        @else
+                            <span class="shrink-0 w-6"></span>
+                        @endif
                         @if(!$job->isOpen())
                             <button wire:click="confirmDelete({{ $job->id }})" title="Smazat z historie"
                                 class="shrink-0 p-1 text-gray-300 dark:text-bambu-dark-5 hover:text-red-600 text-xs transition-colors">🗑️</button>

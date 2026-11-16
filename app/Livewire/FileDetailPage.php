@@ -64,6 +64,96 @@ class FileDetailPage extends Component
         if (!empty($plates)) {
             $this->selectedPlate = $plates[0]['index'] ?? 1;
         }
+
+        // Odkaz "Tisknout znovu" z historie tisku (?reprint=ID)
+        if ($jobId = request()->integer('reprint')) {
+            $this->reprint($jobId);
+        }
+    }
+
+    /**
+     * Otevře dialog tisku se stejným nastavením jako dřívější tisk
+     * (tiskárna, deska, podložka, teploty trysky, AMS sloty, volby tisku).
+     * Nic se neodešle - uživatel nastavení zkontroluje a potvrdí.
+     */
+    public function reprint(int $jobId): void
+    {
+        $job = \App\Models\PrintJob::where('id', $jobId)->where('file_id', $this->file->id)->first();
+        if (!$job) {
+            $this->dispatch('toast', type: 'error', message: 'Tisk v historii nebyl nalezen.');
+            return;
+        }
+        $printer = $job->printer_id ? Printer::where('id', $job->printer_id)->where('enabled', true)->first() : null;
+        if (!$printer) {
+            $this->dispatch('toast', type: 'error', message: 'Tiskárna z tohoto tisku už není dostupná – vyber ji ručně.');
+            return;
+        }
+
+        $plates = collect($this->file->metadata['plates'] ?? []);
+        if ($job->plate_index && $plates->contains('index', $job->plate_index)) {
+            $this->selectedPlate = $job->plate_index;
+        }
+
+        $this->openPrintDialog($printer->id);
+
+        $o = $job->options ?? [];
+
+        // Podložka
+        $plate = $o['bed_plate'] ?? $job->bed_type;
+        $known = array_keys($this->file->metadata['bed_temp_options'] ?? []);
+        if ($plate && ($plate === $this->selectedBedPlate || in_array($plate, $known, true))) {
+            $this->selectedBedPlate = $plate;
+        }
+
+        // Volby tisku
+        if (in_array($o['bed_leveling_mode'] ?? null, ['auto', 'always', 'never'], true)) {
+            $this->bedLevelingMode = $o['bed_leveling_mode'];
+        } elseif (array_key_exists('bed_leveling', $o)) {
+            $this->bedLevelingMode = $o['bed_leveling'] ? 'always' : 'never';
+        }
+        foreach ([
+            'timelapse'      => 'useTimelapse',
+            'flow_cali'      => 'useFlowCali',
+            'layer_inspect'  => 'useLayerInspect',
+            'vibration_cali' => 'useVibrationCali',
+            'use_ams'        => 'useAms',
+        ] as $key => $prop) {
+            if (array_key_exists($key, $o)) {
+                $this->{$prop} = (bool) $o[$key];
+            }
+        }
+        if ($this->fileHasLayerScan === false) {
+            $this->useLayerInspect = false;
+        }
+
+        // Teploty trysky - jen když soubor má pořád stejné výchozí teploty
+        foreach ($o['nozzle'] ?? [] as $i => $t) {
+            if (isset($this->nozzleTemps[$i])
+                && (int) $this->nozzleTemps[$i]['initial'] === (int) ($t['initial'] ?? -1)
+                && (int) $this->nozzleTemps[$i]['other'] === (int) ($t['other'] ?? -1)) {
+                $this->nozzleTemps[$i]['new_initial'] = (int) ($t['new_initial'] ?? $t['initial']);
+                $this->nozzleTemps[$i]['new_other']   = (int) ($t['new_other'] ?? $t['other']);
+            }
+        }
+
+        // AMS sloty - jen ty, ve kterých je pořád nějaký filament
+        $loaded = [];
+        foreach ($printer->status['ams']['ams'] ?? [] as $unit) {
+            foreach ($unit['tray'] ?? [] as $tray) {
+                if (($tray['tray_color'] ?? '00000000') !== '00000000') {
+                    $loaded[(int) $unit['id'] . '-' . (int) $tray['id']] = true;
+                }
+            }
+        }
+        foreach ($o['ams'] ?? [] as $i => $m) {
+            if (isset($this->amsMapping[$i], $loaded[(int) $m['ams'] . '-' . (int) $m['slot']])) {
+                $this->amsMapping[$i]['ams']  = (int) $m['ams'];
+                $this->amsMapping[$i]['slot'] = (int) $m['slot'];
+            }
+        }
+
+        $when = $job->started_at?->local()->format('d.m.Y H:i') ?? '';
+        $this->dispatch('toast', type: 'success', message: "Nastavení převzato z tisku {$when} – zkontroluj a spusť.");
     }
 
     public function selectPlate(int $index): void
@@ -491,6 +581,11 @@ class FileDetailPage extends Component
                             'layer_inspect'  => $this->useLayerInspect,
                             'vibration_cali' => $this->useVibrationCali,
                             'use_ams'        => $this->useAms,
+                            // Pro "Tisknout znovu" - stejné nastavení dialogu
+                            'bed_plate'         => $this->selectedBedPlate,
+                            'bed_leveling_mode' => $this->bedLevelingMode,
+                            'nozzle'            => $this->nozzleTemps,
+                            'ams'               => array_map(fn ($m) => ['ams' => (int) $m['ams'], 'slot' => (int) $m['slot']], $this->amsMapping),
                         ],
                     );
                 } catch (\Throwable $e) {
