@@ -51,6 +51,7 @@ abstract class AbstractPrinterDriver implements PrinterDriver
 
     public function uploadFile(string $localPath, string $remoteName): bool { return false; }
     public function startPrint(PrintRequest $request): ?string { return null; }
+    public function skipObjects(array $objectIds): bool { return false; }
     public function pause(): bool { return false; }
     public function resume(): bool { return false; }
     public function stop(): bool { return false; }

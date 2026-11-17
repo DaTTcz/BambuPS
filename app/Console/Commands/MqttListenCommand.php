@@ -123,6 +123,10 @@ class MqttListenCommand extends Command
             if (isset($print['spd_lvl']))                $status['spd_lvl']                = $print['spd_lvl'];
             // Fáze tisku (4 = výměna filamentu, 6 = pauza kvůli konci filamentu, ...)
             if (isset($print['stg_cur']))                $status['stg_cur']                = (int) $print['stg_cur'];
+            // Vynechané objekty (identify_id)
+            if (isset($print['s_obj']) && is_array($print['s_obj'])) {
+                $status['skipped_objects'] = array_values(array_map('intval', $print['s_obj']));
+            }
 
             if (isset($print['nozzle_temper']) || isset($print['bed_temper'])) {
                 $status['temperatures'] = array_merge($status['temperatures'] ?? [], [
@@ -263,8 +267,41 @@ class MqttListenCommand extends Command
         ]);
 
         $this->checkPendingAmsKick($printer, $status, $mqtt);
+        $this->checkPendingSkips($printer, $status);
 
         $this->line('[' . now()->format('H:i:s') . '] ' . $printer->name . ': ' . ($status['gcode_state'] ?? 'unknown'));
+    }
+
+    /**
+     * Objekty vynechané už v dialogu tisku: příkaz se posílá, dokud tiskárna
+     * nepotvrdí, že je má v seznamu vynechaných (s_obj). Opakuje se nejvýš
+     * jednou za 20 s - během přípravy tisku ho tiskárna nemusí přijmout.
+     */
+    private function checkPendingSkips(Printer $printer, array $status): void
+    {
+        $state = $status['gcode_state'] ?? '';
+        if (!in_array($state, ['PREPARE', 'RUNNING', 'PAUSE'], true)) {
+            return;
+        }
+
+        $job = \App\Models\PrintJob::where('printer_id', $printer->id)
+            ->whereIn('status', [\App\Models\PrintJob::STATUS_QUEUED, \App\Models\PrintJob::STATUS_RUNNING])
+            ->latest('id')
+            ->first();
+        $wanted = array_map('intval', $job?->options['skip_objects'] ?? []);
+        if (!$wanted) {
+            return;
+        }
+
+        $skipped = $status['skipped_objects'] ?? [];
+        if (!array_diff($wanted, $skipped)) {
+            return; // tiskárna potvrdila
+        }
+
+        if (\Illuminate\Support\Facades\Cache::add("bambups:skip_sent:{$job->id}", 1, 20)) {
+            $printer->driver()->skipObjects(array_merge($skipped, $wanted));
+            $this->line('[' . now()->format('H:i:s') . "] {$printer->name}: vynechávám objekty " . implode(', ', $wanted));
+        }
     }
 
     /**

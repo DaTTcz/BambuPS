@@ -154,6 +154,63 @@ class PrinterDetail extends Component
             message: $success ? 'Tisk zastaven' : 'Chyba');
     }
 
+    /**
+     * Objekty právě tištěné desky (pro vynechání během tisku).
+     * @return array{job: \App\Models\PrintJob, objects: array, bed: array, skipped: int[]}|null
+     */
+    public function getJobObjectsProperty(): ?array
+    {
+        if (!in_array($this->printer->status['gcode_state'] ?? '', ['PREPARE', 'RUNNING', 'PAUSE'], true)
+            || !$this->printer->supports(\App\Printers\Capability::SKIP_OBJECTS)) {
+            return null;
+        }
+        $job = \App\Models\PrintJob::with('file')
+            ->where('printer_id', $this->printer->id)
+            ->whereIn('status', [\App\Models\PrintJob::STATUS_QUEUED, \App\Models\PrintJob::STATUS_RUNNING])
+            ->latest('id')
+            ->first();
+        $plate   = collect($job?->file?->metadata['plates'] ?? [])->firstWhere('index', $job?->plate_index ?? 1) ?? [];
+        $objects = $plate['objects_info'] ?? [];
+        if (!$job || count($objects) < 2) {
+            return null;
+        }
+        return [
+            'job'     => $job,
+            'objects' => $objects,
+            'bed'     => $job->file->metadata['bed_size'] ?? [256, 256],
+            'skipped' => array_map('intval', $this->printer->status['skipped_objects'] ?? []),
+        ];
+    }
+
+    /** Vynechá objekt během tisku (nejde vrátit) */
+    public function skipObjectLive(int $id): void
+    {
+        $info = $this->jobObjects;
+        if (!$info || !in_array($id, array_column($info['objects'], 'id'), true) || in_array($id, $info['skipped'], true)) {
+            return;
+        }
+        $all = array_values(array_unique(array_merge($info['skipped'], [$id])));
+        if (count($all) >= count($info['objects'])) {
+            $this->dispatch('toast', type: 'error', message: 'Nelze vynechat všechny objekty – zastav raději celý tisk.');
+            return;
+        }
+
+        $ok = $this->cmd()->skipObjects($all);
+        if ($ok) {
+            // Do historie: co se během tisku vynechalo
+            $n   = array_search($id, array_column($info['objects'], 'id'), true);
+            $job = $info['job'];
+            $job->update(['overrides' => array_merge($job->overrides ?? [],
+                ['Během tisku vynechán objekt #' . ($n + 1) . ' ' . ($info['objects'][$n]['name'] ?? '')])]);
+            // Ať ho tiskárna "nevrátí" opakovaným odesláním seznamu z dialogu
+            $opts = $job->options ?? [];
+            $opts['skip_objects'] = array_values(array_unique(array_merge($opts['skip_objects'] ?? [], [$id])));
+            $job->update(['options' => $opts]);
+        }
+        $this->dispatch('toast', type: $ok ? 'success' : 'error',
+            message: $ok ? 'Objekt bude vynechán – tiskárna ho přeskočí od další vrstvy.' : 'Příkaz se nepodařilo odeslat.');
+    }
+
     public function confirmResume(): void
     {
         $this->showResumeConfirm = true;

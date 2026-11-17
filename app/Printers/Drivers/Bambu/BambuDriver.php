@@ -61,6 +61,7 @@ class BambuDriver extends AbstractPrinterDriver
             Capability::FIRST_LAYER_INSPECTION,
             Capability::TIMELAPSE,
             Capability::ERROR_CODES,
+            Capability::SKIP_OBJECTS,
         ];
     }
 
@@ -120,6 +121,26 @@ class BambuDriver extends AbstractPrinterDriver
         );
 
         return $ok ? ($cmd->lastTaskId ?? '') : null;
+    }
+
+    /**
+     * Bambu: příkaz skip_objects se seznamem identify_id (stejná čísla jako
+     * "unique label id" v gcode). Tiskárna vynechané hlásí v print.s_obj.
+     * Funguje u souborů slicovaných se zapnutým "Label objects".
+     */
+    public function skipObjects(array $objectIds): bool
+    {
+        $ids = array_values(array_unique(array_map('intval', $objectIds)));
+        if (!$ids) {
+            return false;
+        }
+        return $this->cmd()->send([
+            'print' => [
+                'sequence_id' => (string) time(),
+                'command'     => 'skip_objects',
+                'obj_list'    => $ids,
+            ],
+        ]);
     }
 
     public function pause(): bool  { return $this->cmd()->pause(); }

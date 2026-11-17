@@ -11,7 +11,7 @@ class ThreeMfParserService
      * Soubory se starší verzí se znovu načtou (bambups:reparse po aktualizaci,
      * případně při otevření detailu souboru).
      */
-    public const VERSION = 4;
+    public const VERSION = 6;
 
     public function parse(string $filePath): array
     {
@@ -396,6 +396,77 @@ class ThreeMfParserService
             }
         }
 
+        // Vícebarevný tisk: počet výměn filamentu a odpad (proplach + čistící věž)
+        $ps        = json_decode((string) $zip->getFromName('Metadata/project_settings.config'), true) ?: [];
+        $densities = array_map('floatval', (array) ($ps['filament_density'] ?? []));
+        $diameters = array_map('floatval', (array) ($ps['filament_diameter'] ?? []));
+        $sequences = json_decode((string) $zip->getFromName('Metadata/filament_sequence.json'), true) ?: [];
+        // Objekty desky (id a název) ze slice_info - pro vynechání objektů
+        $plateObjects = [];
+        if ($si !== false && ($sxml = @simplexml_load_string($si))) {
+            foreach ($sxml->plate as $sp) {
+                $pidx = null;
+                foreach ($sp->metadata as $mm) {
+                    if ((string) $mm['key'] === 'index') {
+                        $pidx = (int) $mm['value'];
+                    }
+                }
+                foreach ($sp->object as $so) {
+                    $plateObjects[$pidx][(int) $so['identify_id']] = (string) $so['name'];
+                }
+            }
+        }
+        // Velikost podložky (printable_area = "0x0,256x0,256x256,0x256")
+        if (!empty($ps['printable_area'])) {
+            $pts = array_map(fn ($p) => array_map('floatval', explode('x', $p)), (array) $ps['printable_area']);
+            $metadata['bed_size'] = [max(array_column($pts, 0)), max(array_column($pts, 1))];
+        }
+
+        foreach ($metadata['plates'] ?? [] as $pi => $pl) {
+            $multi = count($pl['filaments'] ?? []) >= 2;
+            if (!$multi && count($plateObjects[$pl['index']] ?? []) < 2) {
+                continue; // jednobarevné s jedním objektem - není co počítat
+            }
+            $stream = $zip->getStream("Metadata/plate_{$pl['index']}.gcode");
+            if (!$stream) {
+                continue;
+            }
+            $scanner = new GcodeWasteScanner();
+            while (($line = fgets($stream)) !== false) {
+                $scanner->feed(rtrim($line));
+            }
+            fclose($stream);
+
+            // Objekty s půdorysem (pořadí ze slice_info, bbox z gcode)
+            $boxes = $scanner->objects();
+            $objs  = [];
+            foreach ($plateObjects[$pl['index']] ?? [] as $oid => $oname) {
+                $objs[] = ['id' => $oid, 'name' => $oname, 'bbox' => $boxes[$oid] ?? null];
+            }
+            if (count($objs) >= 2) {
+                $metadata['plates'][$pi]['objects_info'] = $objs;
+            }
+            // Rozměry ze skutečných objektů (plate_N.json někdy obsahuje i čistící věž)
+            $known = array_filter(array_column($objs, 'bbox'));
+            if ($known) {
+                $metadata['plates'][$pi]['size_x'] = round(max(array_column($known, 2)) - min(array_column($known, 0)), 1);
+                $metadata['plates'][$pi]['size_y'] = round(max(array_column($known, 3)) - min(array_column($known, 1)), 1);
+            }
+            if (!$multi) {
+                continue;
+            }
+
+            $w = $scanner->result($densities, $diameters);
+            // Přesnější počet výměn ze sekvence filamentů (Bambu/Orca)
+            $seq = $sequences["plate_{$pl['index']}"]['sequence'] ?? null;
+            if (is_array($seq) && count($seq) > 1) {
+                $w['filament_changes'] = count($seq) - 1;
+            }
+            if ($w['filament_changes'] > 0) {
+                $metadata['plates'][$pi] += $w;
+            }
+        }
+
         // Výška modelu po deskách z hlavičky gcode ("; max_z_height: 60.00")
         foreach ($metadata['plates'] ?? [] as $pi => $pl) {
             $stream = $zip->getStream("Metadata/plate_{$pl['index']}.gcode");
@@ -410,7 +481,7 @@ class ThreeMfParserService
         if (!empty($metadata['plates'][0]['max_z_height'])) {
             $metadata['max_z_height'] = $metadata['plates'][0]['max_z_height'];
         }
-        foreach (['size_x', 'size_y'] as $k) {
+        foreach (['size_x', 'size_y', 'filament_changes', 'waste_flush_g', 'waste_tower_g'] as $k) {
             if (!empty($metadata['plates'][0][$k])) {
                 $metadata[$k] = $metadata['plates'][0][$k];
             }

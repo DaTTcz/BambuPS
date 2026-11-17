@@ -60,6 +60,9 @@
                 ->map(fn ($v) => rtrim(rtrim(number_format((float) $v, 1, ',', ''), '0'), ','))->implode(' × ')
                 . ' mm' . (empty($m['size_x']) ? ' (výška)' : '')
             : null,
+        'Výměny'       => !empty($m['filament_changes'])
+            ? $m['filament_changes'] . '× · odpad ~' . round(($m['waste_flush_g'] ?? 0) + ($m['waste_tower_g'] ?? 0)) . ' g'
+            : null,
         'Profil'       => $m['print_profile'] ?? null,
         'Slicer'       => $m['slicer'] ?? null,
         'Velikost'     => $file->size_formatted,

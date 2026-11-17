@@ -28,6 +28,8 @@ class FileDetailPage extends Component
     public bool $useFlowCali      = false;
     public bool $useVibrationCali = false;
     public string $bedType        = 'auto';
+    /** ID objektů desky, které se nemají tisknout */
+    public array $skipObjects     = [];
     // Vybraný typ FYZICKÉ podložky pro patch teploty v gcode - nesouvisí
     // s $bedType výše (to je MQTT pole, které má zůstat "auto").
     public string $selectedBedPlate = '';
@@ -134,6 +136,13 @@ class FileDetailPage extends Component
             }
         }
 
+        // Vynechané objekty - jen ty, které deska pořád má
+        $known = array_column($this->plateObjects, 'id');
+        $this->skipObjects = array_values(array_intersect(array_map('intval', $o['skip_objects'] ?? []), $known));
+        if (count($this->skipObjects) >= count($known)) {
+            $this->skipObjects = [];
+        }
+
         // AMS sloty - jen ty, ve kterých je pořád nějaký filament
         $loaded = [];
         foreach ($printer->status['ams']['ams'] ?? [] as $unit) {
@@ -163,6 +172,7 @@ class FileDetailPage extends Component
     {
         $this->printPrinterId          = $printerId;
         $this->amsMapping              = [];
+        $this->skipObjects             = [];
         $this->selectingAmsForFilament = null;
         $this->selectingAmsUnit        = null;
 
@@ -388,6 +398,17 @@ class FileDetailPage extends Component
             }
         }
 
+        if ($this->skipObjects) {
+            $objs  = $this->plateObjects;
+            $names = [];
+            foreach ($objs as $n => $o) {
+                if (in_array($o['id'], $this->skipObjects, true)) {
+                    $names[] = '#' . ($n + 1) . ' ' . $o['name'];
+                }
+            }
+            $out[] = 'Vynechané objekty (' . count($names) . ' z ' . count($objs) . '): ' . implode(', ', $names);
+        }
+
         return $out;
     }
 
@@ -456,10 +477,43 @@ class FileDetailPage extends Component
         return $changed ? ['first' => $first, 'rest' => $rest, 'insert' => $insert] : [];
     }
 
+    /** Objekty aktuální desky: [['id', 'name', 'bbox'], ...] (jen u víc objektů) */
+    public function getPlateObjectsProperty(): array
+    {
+        $plate = collect($this->file->metadata['plates'] ?? [])->firstWhere('index', $this->selectedPlate) ?? [];
+        return $plate['objects_info'] ?? [];
+    }
+
+    public function toggleSkipObject(int $id): void
+    {
+        $ids = array_column($this->plateObjects, 'id');
+        if (!in_array($id, $ids, true)) {
+            return;
+        }
+        if (in_array($id, $this->skipObjects, true)) {
+            $this->skipObjects = array_values(array_diff($this->skipObjects, [$id]));
+        } elseif (count($this->skipObjects) < count($ids) - 1) {
+            $this->skipObjects[] = $id;
+        } else {
+            $this->dispatch('toast', type: 'error', message: 'Aspoň jeden objekt se musí tisknout.');
+        }
+    }
+
     public function confirmPrint(): void
     {
         $printer   = Printer::findOrFail($this->printPrinterId);
         $localPath = storage_path('app/private/' . $this->file->disk_path);
+
+        // Vynechané objekty - jen platná ID aktuální desky, aspoň jeden se tiskne
+        $objectIds         = array_column($this->plateObjects, 'id');
+        $this->skipObjects = array_values(array_intersect(array_map('intval', $this->skipObjects), $objectIds));
+        if ($this->skipObjects && !$printer->supports(\App\Printers\Capability::SKIP_OBJECTS)) {
+            $this->skipObjects = [];
+        }
+        if ($objectIds && count($this->skipObjects) >= count($objectIds)) {
+            $this->dispatch('toast', type: 'error', message: 'Aspoň jeden objekt se musí tisknout.');
+            return;
+        }
 
         if (!file_exists($localPath)) {
             $this->dispatch('toast', type: 'error', message: 'Soubor nenalezen na disku');
@@ -552,6 +606,7 @@ class FileDetailPage extends Component
                     \App\Printers\PrintRequest::OPT_FIRST_LAYER_INSPECT   => $this->useLayerInspect,
                     \App\Printers\PrintRequest::OPT_FLOW_CALIBRATION      => $this->useFlowCali,
                     \App\Printers\PrintRequest::OPT_VIBRATION_CALIBRATION => $this->useVibrationCali,
+                    \App\Printers\PrintRequest::OPT_SKIP_OBJECTS          => $this->skipObjects,
                 ],
             ));
             $started = $taskId !== null;
@@ -577,6 +632,8 @@ class FileDetailPage extends Component
                             'bed_leveling_mode' => $this->bedLevelingMode,
                             'nozzle'            => $this->nozzleTemps,
                             'ams'               => array_map(fn ($m) => ['ams' => (int) $m['ams'], 'slot' => (int) $m['slot']], $this->amsMapping),
+                            // Objekty vynechané před tiskem - MQTT listener je pošle tiskárně
+                            'skip_objects'      => $this->skipObjects,
                         ],
                     );
                 } catch (\Throwable $e) {

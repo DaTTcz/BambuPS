@@ -43,8 +43,8 @@ $printer->supports(Capability::LIGHT);   // umí tiskárna světlo?
    - `capabilities()` – co tiskárna umí (konstanty z `Capability`),
    - `fileTypes()` – jaké soubory tiskne (`['gcode', 'bgcode']`).
 3. Implementuj metody, které tiskárna podporuje: `uploadFile()`,
-   `startPrint()`, `pause()`, `resume()`, `stop()`, teploty, ventilátory,
-   pohyb, `cameraSource()`… Co neimplementuješ, vrací `false` a appka
+   `startPrint()`, `pause()`, `resume()`, `stop()`, `skipObjects()`,
+   teploty, ventilátory, pohyb, `cameraSource()`… Co neimplementuješ, vrací `false` a appka
    příslušné tlačítko skryje podle `capabilities()`.
 4. Zaregistruj třídu v `config/printers.php`, případně ze service provideru:
    `PrinterDrivers::register(MujDriver::class);`
@@ -74,6 +74,7 @@ tiskárna zná, ostatní vynechá:
 | `lights` | `[{node, mode}]`, volitelné |
 | `ams` | zásobník filamentů (tvar podle Bambu AMS), volitelné |
 | `print_error`, `hms` | chyby tiskárny, volitelné |
+| `skipped_objects` | ID vynechaných objektů (`Capability::SKIP_OBJECTS`), volitelné |
 
 Názvy klíčů pocházejí z Bambu, protože Bambu byl první ovladač. Ostatní
 ovladače na ně převádějí své hodnoty (např. PrusaLink `PRINTING` → `RUNNING`).

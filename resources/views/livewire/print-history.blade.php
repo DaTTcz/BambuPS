@@ -23,7 +23,13 @@
         <div class="bg-white dark:bg-bambu-dark-2 border border-gray-200 dark:border-bambu-dark-4 rounded-xl p-4">
             <p class="text-xs text-gray-400 dark:text-bambu-text-dim">Filament</p>
             <p class="text-2xl font-semibold text-gray-800 dark:text-bambu-text">{{ number_format($s['filament_kg'], 2, ',', ' ') }} kg</p>
-            <p class="text-xs text-gray-400 dark:text-bambu-text-dim mt-0.5">odhad ze slicéru</p>
+            <p class="text-xs text-gray-400 dark:text-bambu-text-dim mt-0.5">
+                odhad ze slicéru
+                @if($s['waste_g'] > 0)
+                    · z toho odpad {{ number_format($s['waste_g'], 0, ',', ' ') }} g
+                    <span title="Proplach a čistící věž u vícebarevných tisků">({{ $s['changes'] }} výměn)</span>
+                @endif
+            </p>
         </div>
     </div>
 

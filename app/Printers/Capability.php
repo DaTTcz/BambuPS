@@ -38,6 +38,8 @@ final class Capability
     public const VIBRATION_CALIBRATION = 'vibration_calibration';
     public const FIRST_LAYER_INSPECTION = 'first_layer_inspection';
     public const TIMELAPSE = 'timelapse';
+    /** Vynechání objektů (před tiskem i během něj) */
+    public const SKIP_OBJECTS = 'skip_objects';
     /** Kódy chyb tiskárny (Bambu HMS) */
     public const ERROR_CODES = 'error_codes';
 }

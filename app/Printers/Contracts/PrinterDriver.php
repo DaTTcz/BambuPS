@@ -57,6 +57,13 @@ interface PrinterDriver
     /** Spustí tisk nahraného souboru; vrací ID úlohy (pro historii) nebo null při chybě */
     public function startPrint(PrintRequest $request): ?string;
 
+    /**
+     * Vynechá objekty z běžícího (nebo právě spouštěného) tisku.
+     * @param int[] $objectIds ID objektů ze souboru (Bambu: identify_id / label id);
+     *                         posílá se vždy kompletní seznam vynechaných
+     */
+    public function skipObjects(array $objectIds): bool;
+
     public function pause(): bool;
     public function resume(): bool;
     public function stop(): bool;

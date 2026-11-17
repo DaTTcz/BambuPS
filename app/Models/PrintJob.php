@@ -23,7 +23,7 @@ class PrintJob extends Model
         'source', 'task_id', 'status',
         'started_at', 'ended_at', 'duration_seconds', 'estimated_seconds',
         'progress', 'layer_reached', 'total_layers',
-        'filament_g', 'filaments', 'overrides', 'options',
+        'filament_g', 'waste_g', 'filament_changes', 'filaments', 'overrides', 'options',
         'print_error', 'hms', 'snapshot_path',
     ];
 
@@ -68,6 +68,15 @@ class PrintJob extends Model
         if ($this->status === self::STATUS_FINISHED) return $this->filament_g;
         if ($this->progress === null) return null;
         return round($this->filament_g * $this->progress / 100, 1);
+    }
+
+    /** Odpad (proplach + věž) - u nedokončeného tisku poměrně podle průběhu */
+    public function getWasteUsedGAttribute(): ?float
+    {
+        if ($this->waste_g === null) return null;
+        if ($this->status === self::STATUS_FINISHED) return (float) $this->waste_g;
+        if ($this->progress === null) return null;
+        return round($this->waste_g * $this->progress / 100, 1);
     }
 
     /** Délka tisku - u běžícího počítaná průběžně */

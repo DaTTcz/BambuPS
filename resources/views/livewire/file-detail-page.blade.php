@@ -73,6 +73,14 @@
                                 <div class="bg-gray-50 rounded-lg p-3">
                                     <p class="text-xs text-gray-400">Filament</p>
                                     <p class="text-sm font-semibold text-gray-700 mt-0.5">🧵 {{ $currentPlate['filament_used_g'] }}g · {{ $currentPlate['filament_used_m'] }}m</p>
+                                    @if(!empty($currentPlate['filament_changes']))
+                                        @php $wasteG = round(($currentPlate['waste_flush_g'] ?? 0) + ($currentPlate['waste_tower_g'] ?? 0)); @endphp
+                                        <p class="text-xs text-gray-400 mt-0.5"
+                                            title="Proplach {{ $currentPlate['waste_flush_g'] ?? 0 }} g · čistící věž {{ $currentPlate['waste_tower_g'] ?? 0 }} g">
+                                            🔄 {{ $currentPlate['filament_changes'] }} výměn · odpad ~{{ $wasteG }} g
+                                            ({{ $currentPlate['filament_used_g'] > 0 ? round($wasteG / $currentPlate['filament_used_g'] * 100) : 0 }} %)
+                                        </p>
+                                    @endif
                                 </div>
                             @endif
                             @if(!empty($currentPlate['nozzle_diameter']))
@@ -113,12 +121,6 @@
                                     <p class="text-sm font-semibold text-gray-700 mt-0.5">📦 {{ $mm($sizeZ) }} mm</p>
                                 </div>
                             @endif
-                            @if(!empty($file->metadata['slicer']))
-                                <div class="bg-gray-50 rounded-lg p-3">
-                                    <p class="text-xs text-gray-400">Slicer</p>
-                                    <p class="text-sm font-semibold text-gray-700 mt-0.5 truncate" title="{{ $file->metadata['slicer'] }}">🧩 {{ $file->metadata['slicer'] }}</p>
-                                </div>
-                            @endif
                             @php
                                 $nzTemp    = $currentPlate['nozzle_temp'] ?? $file->metadata['nozzle_temp'] ?? null;
                                 $nzInitial = $currentPlate['nozzle_temp_initial_layer'] ?? $file->metadata['nozzle_temp_initial_layer'] ?? null;
@@ -147,6 +149,12 @@
                                     <p class="text-sm font-semibold text-gray-700 mt-0.5">◼ {{ $file->metadata['infill_density'] }}
                                         @if(!empty($file->metadata['infill_pattern'])) · {{ $file->metadata['infill_pattern'] }}@endif
                                     </p>
+                                </div>
+                            @endif
+                            @if(!empty($file->metadata['slicer']))
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <p class="text-xs text-gray-400">Slicer</p>
+                                    <p class="text-sm font-semibold text-gray-700 mt-0.5 truncate" title="{{ $file->metadata['slicer'] }}">🧩 {{ $file->metadata['slicer'] }}</p>
                                 </div>
                             @endif
                             @if(!empty($file->metadata['print_profile']))
@@ -435,6 +443,29 @@
                                     @endif
                                 @endforeach
                             </div>
+                        </div>
+                    @endif
+
+                    {{-- Objekty na desce - vynechání před tiskem --}}
+                    @php
+                        $dlgObjects = $this->plateObjects;
+                        $dlgCanSkip = $dlgObjects && \App\Models\Printer::find($printPrinterId)?->supports(\App\Printers\Capability::SKIP_OBJECTS);
+                    @endphp
+                    @if($dlgCanSkip)
+                        <div class="mb-5">
+                            <div class="flex items-center justify-between mb-2">
+                                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Objekty na desce</p>
+                                <span class="text-xs {{ $skipObjects ? 'text-amber-600 font-medium' : 'text-gray-400' }}">
+                                    Tisknout {{ count($dlgObjects) - count($skipObjects) }} z {{ count($dlgObjects) }}
+                                </span>
+                            </div>
+                            @include('livewire.partials.object-map', [
+                                'objects' => $dlgObjects,
+                                'bed'     => $file->metadata['bed_size'] ?? [256, 256],
+                                'skipped' => $skipObjects,
+                                'action'  => 'toggleSkipObject',
+                            ])
+                            <p class="text-xs text-gray-400 mt-1">Kliknutím na objekt ho vynecháš. Tiskárna ho přeskočí, soubor zůstane beze změny.</p>
                         </div>
                     @endif
 

@@ -172,6 +172,31 @@
         </div>
     </div>
 
+    {{-- Objekty právě tištěné desky - vynechání během tisku --}}
+    @if($printer->is_online && ($jobObj = $this->jobObjects))
+        <div class="bg-white dark:bg-bambu-dark-2 border border-gray-200 dark:border-bambu-dark-4 rounded-xl overflow-hidden mb-6"
+            x-data="{ open: {{ count($jobObj['skipped']) ? 'true' : 'false' }} }">
+            <button type="button" x-on:click="open = !open" class="w-full px-5 py-3 flex items-center justify-between text-left">
+                <span class="font-semibold text-gray-800 dark:text-bambu-text">🧩 Objekty na desce</span>
+                <span class="text-xs text-gray-500 dark:text-bambu-text-dim">
+                    tiskne se {{ count($jobObj['objects']) - count($jobObj['skipped']) }} z {{ count($jobObj['objects']) }}
+                    <span class="ml-1" x-text="open ? '▲' : '▼'"></span>
+                </span>
+            </button>
+            <div x-show="open" x-cloak class="px-5 pb-4">
+                @include('livewire.partials.object-map', [
+                    'objects' => $jobObj['objects'],
+                    'bed'     => $jobObj['bed'],
+                    'skipped' => $jobObj['skipped'],
+                    'locked'  => $jobObj['skipped'],
+                    'action'  => 'skipObjectLive',
+                    'confirm' => 'Vynechat tento objekt? Tiskárna ho přestane tisknout a vrátit to nepůjde.',
+                ])
+                <p class="text-xs text-gray-400 mt-1">Kliknutím na objekt ho vynecháš – třeba když se odlepil. Vrátit to nejde.</p>
+            </div>
+        </div>
+    @endif
+
     {{-- Ovládání --}}
     @if($printer->is_online)
 

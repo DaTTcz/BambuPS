@@ -54,6 +54,10 @@ class PrintHistoryService
         $filamentG = $plate['filament_used_g']
             ?? (count($plates) <= 1 ? ($file->metadata['filament_used_g'] ?? null) : null);
 
+        $wasteG = isset($plate['waste_flush_g']) || isset($plate['waste_tower_g'])
+            ? round((float) ($plate['waste_flush_g'] ?? 0) + (float) ($plate['waste_tower_g'] ?? 0), 2)
+            : null;
+
         $estimated = $plate['print_time_seconds']
             ?? (count($plates) <= 1 ? ($file->metadata['print_time_seconds'] ?? null) : null);
 
@@ -66,6 +70,8 @@ class PrintHistoryService
             'estimated_seconds' => $estimated ? (int) $estimated : null,
             'total_layers'      => $plate['total_layer_num'] ?? null,
             'filament_g'        => $filamentG !== null ? round((float) $filamentG, 2) : null,
+            'waste_g'           => $wasteG,
+            'filament_changes'  => $plate['filament_changes'] ?? null,
             'filaments'         => $filaments ?: null,
             'bed_type'          => $bedType,
             'bed_temp'          => $bedTemp,
@@ -105,6 +111,8 @@ class PrintHistoryService
             'estimated_seconds' => $estimated ? (int) $estimated : null,
             'total_layers'      => $plate['total_layer_num'] ?? null,
             'filament_g'        => $filamentG !== null ? round((float) $filamentG, 2) : null,
+            'waste_g'           => $wasteG,
+            'filament_changes'  => $plate['filament_changes'] ?? null,
             'filaments'         => $filaments ?: null,
         ]);
     }

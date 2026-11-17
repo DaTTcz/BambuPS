@@ -59,10 +59,14 @@ class GcodeParserService
         $inLayers  = false;
         $feature   = '';
         $skipTypes = ['custom', 'wipe tower', 'prime tower', 'skirt', 'purge', 'wipe'];
+        $waste     = new GcodeWasteScanner();
 
         while (($line = fgets($handle)) !== false) {
             $lineNo++;
             $line = rtrim($line);
+            if (!$inConfigBlock) {
+                $waste->feed($line);
+            }
 
             // Header block
             if ($line === '; HEADER_BLOCK_START') { $inHeaderBlock = true; continue; }
@@ -208,6 +212,20 @@ class GcodeParserService
                 $metadata['print_time']         = $timeStr;
                 $metadata['print_time_seconds'] = $this->parseTime($timeStr);
             }
+        }
+
+        // Výměny filamentu a odpad (proplach + čistící věž)
+        if ($waste->changes() > 0) {
+            $w = $waste->result(
+                $this->csvFloats($configData['filament_density'] ?? ''),
+                $this->csvFloats($configData['filament_diameter'] ?? ''),
+            );
+            // PrusaSlicer uvádí spotřebu věže přímo
+            $towerG = $footer['total filament used for wipe tower [g]'] ?? ($configData['total filament used for wipe tower [g]'] ?? null);
+            if ($towerG !== null && (float) $towerG > 0) {
+                $w['waste_tower_g'] = round((float) $towerG, 1);
+            }
+            $metadata += $w;
         }
 
         $usedG  = $this->csvFloats($footer['filament used [g]'] ?? '');
@@ -360,6 +378,9 @@ class GcodeParserService
                 'filament_used_g'    => $metadata['filament_used_g'] ?? null,
                 'filament_used_m'    => $metadata['filament_used_m'] ?? null,
                 'print_time_seconds' => $metadata['print_time_seconds'] ?? null,
+                'filament_changes'   => $metadata['filament_changes'] ?? null,
+                'waste_flush_g'      => $metadata['waste_flush_g'] ?? null,
+                'waste_tower_g'      => $metadata['waste_tower_g'] ?? null,
             ]];
         }
 

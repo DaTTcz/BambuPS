@@ -65,13 +65,14 @@ class PrintHistory extends Component
 
     public function getStatsProperty(): array
     {
-        $jobs = $this->filteredQuery()->get(['status', 'duration_seconds', 'started_at', 'filament_g', 'progress']);
+        $jobs = $this->filteredQuery()->get(['status', 'duration_seconds', 'started_at', 'filament_g', 'waste_g', 'filament_changes', 'progress']);
 
         $closed   = $jobs->whereIn('status', [PrintJob::STATUS_FINISHED, PrintJob::STATUS_FAILED, PrintJob::STATUS_CANCELLED]);
         $finished = $jobs->where('status', PrintJob::STATUS_FINISHED)->count();
 
         $seconds = $jobs->sum(fn ($j) => $j->duration ?? 0);
         $grams   = $jobs->sum(fn ($j) => $j->filament_used_g ?? 0);
+        $waste   = $jobs->sum(fn ($j) => $j->waste_used_g ?? 0);
 
         return [
             'count'        => $jobs->count(),
@@ -81,6 +82,8 @@ class PrintHistory extends Component
             'success_rate' => $closed->count() > 0 ? round($finished / $closed->count() * 100) : null,
             'hours'        => round($seconds / 3600, 1),
             'filament_kg'  => round($grams / 1000, 2),
+            'waste_g'      => round($waste),
+            'changes'      => (int) $jobs->sum(fn ($j) => $j->filament_changes ?? 0),
         ];
     }
 

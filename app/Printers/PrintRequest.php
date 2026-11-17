@@ -29,6 +29,8 @@ final class PrintRequest
     public const OPT_FIRST_LAYER_INSPECT  = 'first_layer_inspection';
     public const OPT_FLOW_CALIBRATION     = 'flow_calibration';
     public const OPT_VIBRATION_CALIBRATION = 'vibration_calibration';
+    /** int[] ID objektů, které se nemají tisknout */
+    public const OPT_SKIP_OBJECTS         = 'skip_objects';
 
     public function option(string $key, mixed $default = null): mixed
     {
