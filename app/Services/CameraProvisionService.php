@@ -22,8 +22,12 @@ class CameraProvisionService
 
         $streams = '';
         foreach ($printers as $printer) {
+            $source = $printer->cameraSource();
+            if (!$source) {
+                continue; // tiskárna bez kamery
+            }
             // Jednoduché uvozovky v YAML: URL může obsahovat ?, & apod.
-            $source   = str_replace("'", "''", $printer->cameraSource());
+            $source   = str_replace("'", "''", $source);
             $streams .= "  printer_{$printer->id}: '{$source}'\n";
         }
 
@@ -40,7 +44,7 @@ class CameraProvisionService
         // camera:capture (HLS/snapshot přes ffmpeg -c:v copy) je jen pro Bambu
         // H.264 stream. Vlastní kamera (např. MJPEG) ho nepotřebuje - snímky
         // bere go2rtc nebo přímo URL snímku.
-        if ($printer->hasCustomCamera()) {
+        if ($printer->hasCustomCamera() || ($printer->driver ?: 'bambu') !== 'bambu') {
             $this->removeCameraSupervisorConf($printer->id);
             return;
         }

@@ -55,7 +55,13 @@
                             : null,
         'Vázový režim' => !empty($m['spiral_mode']) ? 'ano' : null,
         'Desky'        => (($m['plate_count'] ?? 0) > 1) ? $m['plate_count'] : null,
+        'Rozměry'      => !empty($m['max_z_height'])
+            ? collect(!empty($m['size_x']) && !empty($m['size_y']) ? [$m['size_x'], $m['size_y'], $m['max_z_height']] : [$m['max_z_height']])
+                ->map(fn ($v) => rtrim(rtrim(number_format((float) $v, 1, ',', ''), '0'), ','))->implode(' × ')
+                . ' mm' . (empty($m['size_x']) ? ' (výška)' : '')
+            : null,
         'Profil'       => $m['print_profile'] ?? null,
+        'Slicer'       => $m['slicer'] ?? null,
         'Velikost'     => $file->size_formatted,
         'Nahráno'      => $file->created_at?->local()->format('d.m.Y H:i'),
     ], fn ($v) => $v !== null && $v !== '');

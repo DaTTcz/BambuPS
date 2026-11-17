@@ -5,7 +5,6 @@ namespace App\Livewire;
 use App\Models\Module;
 use App\Models\Printer;
 use App\Services\CameraProvisionService;
-use App\Services\PrinterCommandService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
@@ -113,7 +112,10 @@ class ModuleManager extends Component
         }
 
         $printer = Printer::findOrFail($printerId);
-        $success = (new PrinterCommandService($printer))->setCameraResolution($resolution);
+        $driver  = $printer->driver();
+        $success = $printer->supports(\App\Printers\Capability::CAMERA_RESOLUTION)
+            && method_exists($driver, 'setCameraResolution')
+            && $driver->setCameraResolution($resolution);
 
         if ($success) {
             // Optimisticky uložit, ať přepínač hned ukazuje novou hodnotu -

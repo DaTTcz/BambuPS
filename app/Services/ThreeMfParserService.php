@@ -11,7 +11,7 @@ class ThreeMfParserService
      * Soubory se starší verzí se znovu načtou (bambups:reparse po aktualizaci,
      * případně při otevření detailu souboru).
      */
-    public const VERSION = 2;
+    public const VERSION = 4;
 
     public function parse(string $filePath): array
     {
@@ -368,6 +368,53 @@ class ThreeMfParserService
 	    }
 	}
 
+        // Slicer a verze (OrcaSlicer zapisuje svou verzi, Bambu Studio jen X-BBL-Client-Version)
+        $si = $zip->getFromName('Metadata/slice_info.config');
+        if ($si !== false) {
+            if (preg_match('/key="OrcaSlicer-Version" value="([^"]+)"/', $si, $vm)) {
+                $metadata['slicer'] = 'OrcaSlicer ' . $vm[1];
+            } elseif (preg_match('/key="X-BBL-Client-Version" value="([^"]+)"/', $si, $vm)) {
+                $metadata['slicer'] = 'Bambu Studio ' . implode('.', array_map('intval', explode('.', $vm[1])));
+            }
+        }
+
+        // Rozměry modelu v XY po deskách (plate_N.json: bbox_all = [minX, minY, maxX, maxY])
+        foreach ($metadata['plates'] ?? [] as $pi => $pl) {
+            $pj = json_decode((string) $zip->getFromName("Metadata/plate_{$pl['index']}.json"), true);
+            // Sjednocení objektů (bez čistící věže); jinak bbox_all
+            $bb = null;
+            foreach ($pj['bbox_objects'] ?? [] as $obj) {
+                $ob = $obj['bbox'] ?? null;
+                if (is_array($ob) && count($ob) === 4) {
+                    $bb = $bb ? [min($bb[0], $ob[0]), min($bb[1], $ob[1]), max($bb[2], $ob[2]), max($bb[3], $ob[3])] : $ob;
+                }
+            }
+            $bb ??= $pj['bbox_all'] ?? null;
+            if (is_array($bb) && count($bb) === 4) {
+                $metadata['plates'][$pi]['size_x'] = round($bb[2] - $bb[0], 1);
+                $metadata['plates'][$pi]['size_y'] = round($bb[3] - $bb[1], 1);
+            }
+        }
+
+        // Výška modelu po deskách z hlavičky gcode ("; max_z_height: 60.00")
+        foreach ($metadata['plates'] ?? [] as $pi => $pl) {
+            $stream = $zip->getStream("Metadata/plate_{$pl['index']}.gcode");
+            if ($stream) {
+                $head = fread($stream, 16384);
+                fclose($stream);
+                if (preg_match('/^; max_z_height:\s*([\d.]+)/m', (string) $head, $mz)) {
+                    $metadata['plates'][$pi]['max_z_height'] = (float) $mz[1];
+                }
+            }
+        }
+        if (!empty($metadata['plates'][0]['max_z_height'])) {
+            $metadata['max_z_height'] = $metadata['plates'][0]['max_z_height'];
+        }
+        foreach (['size_x', 'size_y'] as $k) {
+            if (!empty($metadata['plates'][0][$k])) {
+                $metadata[$k] = $metadata['plates'][0][$k];
+            }
+        }
         $zip->close();
 
         $metadata['parser_version'] = self::VERSION;

@@ -4,7 +4,6 @@ namespace App\Livewire;
 
 use App\Models\Printer;
 use App\Livewire\Concerns\ControlsPrinterLight;
-use App\Services\PrinterCommandService;
 use Livewire\Component;
 
 class PrintersOverview extends Component
@@ -14,7 +13,7 @@ class PrintersOverview extends Component
     public function pausePrint(int $printerId): void
     {
         $printer = Printer::findOrFail($printerId);
-        $success = (new PrinterCommandService($printer))->pause();
+        $success = $printer->driver()->pause();
         $this->dispatch('toast', type: $success ? 'success' : 'error',
             message: $success ? 'Tisk pozastaven' : 'Chyba');
     }
@@ -22,7 +21,7 @@ class PrintersOverview extends Component
     public function resumePrint(int $printerId): void
     {
         $printer = Printer::findOrFail($printerId);
-        $success = (new PrinterCommandService($printer))->resume();
+        $success = $printer->driver()->resume();
         $this->dispatch('toast', type: $success ? 'success' : 'error',
             message: $success ? 'Tisk obnoven' : 'Chyba');
     }
@@ -30,7 +29,7 @@ class PrintersOverview extends Component
     public function stopPrint(int $printerId): void
     {
         $printer = Printer::findOrFail($printerId);
-        $success = (new PrinterCommandService($printer))->stop();
+        $success = $printer->driver()->stop();
         $this->dispatch('toast', type: $success ? 'success' : 'error',
             message: $success ? 'Tisk zastaven' : 'Chyba');
     }

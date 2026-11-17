@@ -3,7 +3,6 @@
 namespace App\Livewire;
 
 use App\Models\Printer;
-use App\Services\PrinterCommandService;
 use Livewire\Component;
 
 class PrinterDetail extends Component
@@ -38,9 +37,9 @@ class PrinterDetail extends Component
         $this->targetFanFilter  = (int) round(($printer->status['fans']['big_fan2_speed'] ?? 0) / 15 * 100);
     }
 
-    private function cmd(): PrinterCommandService
+    private function cmd(): \App\Printers\Contracts\PrinterDriver
     {
-        return new PrinterCommandService($this->printer);
+        return $this->printer->driver();
     }
 
     private function refresh(): void

@@ -5,8 +5,6 @@ namespace App\Livewire;
 use App\Models\File;
 use App\Models\PrintJob;
 use App\Models\Printer;
-use App\Services\BambuFtpService;
-use App\Services\PrinterCommandService;
 use App\Services\PrintHistoryService;
 use Livewire\Component;
 
@@ -469,7 +467,7 @@ class FileDetailPage extends Component
         }
 
         try {
-            $ftp = new BambuFtpService($printer);
+            $driver = $printer->driver();
 
             // Pokud uživatel zvolil JINOU fyzickou podložku, než pro
             // kterou byl soubor naslicovaný, vytvoříme dočasnou kopii s
@@ -515,13 +513,7 @@ class FileDetailPage extends Component
                 \Log::info('Gcode upraven před tiskem: ' . implode('; ', $patcher->notes));
             }
 
-            // Smazat starý soubor před nahráním nového - bez tohoto kroku
-            // přepisujeme stejný soubor přes FTP STOR, což nemusí vyčistit
-            // interní stav/task tracking tiskárny vázaný na předchozí (např.
-            // neúspěšný) tisk se stejným jménem souboru.
-            $ftp->delete($this->file->original_name);
-
-            $result = $ftp->upload($uploadPath, $this->file->original_name);
+            $result = $driver->uploadFile($uploadPath, $this->file->original_name);
 
             // Dočasný patchnutý soubor už appka nepotřebuje - smazat ho
             // bez ohledu na to, jestli upload prošel.
@@ -534,15 +526,12 @@ class FileDetailPage extends Component
                 return;
             }
 
-	    // Transformace AMS mappingu do formátu který BambuLab očekává
-            $bambuAmsMapping = array_map(function($m) {
-                return [
-                    'ams'            => (int) $m['ams'],
-                    'slot'           => (int) $m['slot'],
-                    'tray_id'        => (int) $m['ams'] * 4 + (int) $m['slot'],
-                    'extruder_index' => (int) ($m['extruder_index'] ?? 0),
-                ];
-            }, array_values($this->amsMapping));
+            // Mapování filamentů na sloty zásobníku (AMS...)
+            $materials = array_map(fn ($m) => [
+                'unit'           => (int) $m['ams'],
+                'slot'           => (int) $m['slot'],
+                'extruder_index' => (int) ($m['extruder_index'] ?? 0),
+            ], array_values($this->amsMapping));
 
             // Vyrovnání podložky podle zvoleného režimu
             $this->useBedLeveling = match ($this->bedLevelingMode) {
@@ -551,26 +540,28 @@ class FileDetailPage extends Component
                 default  => $this->bedLevelingAdvice['level'] ?? true,
             };
 
-            $cmd     = new PrinterCommandService($printer);
-            $started = $cmd->startPrint(
-                $this->file->original_name,
-                $this->selectedPlate,
-                $this->useAms,
-                $this->bedType,
-		$bambuAmsMapping,
-	        $this->useBedLeveling,
-                $this->useTimelapse,
-                $this->useLayerInspect,
-                $this->useFlowCali,
-                $this->useVibrationCali,
-            );
+            $taskId = $driver->startPrint(new \App\Printers\PrintRequest(
+                remoteName: $this->file->original_name,
+                plateIndex: $this->selectedPlate,
+                materials:  $materials,
+                options:    [
+                    \App\Printers\PrintRequest::OPT_USE_MATERIAL_SYSTEM   => $this->useAms,
+                    \App\Printers\PrintRequest::OPT_BED_TYPE              => $this->bedType,
+                    \App\Printers\PrintRequest::OPT_BED_LEVELING          => $this->useBedLeveling,
+                    \App\Printers\PrintRequest::OPT_TIMELAPSE             => $this->useTimelapse,
+                    \App\Printers\PrintRequest::OPT_FIRST_LAYER_INSPECT   => $this->useLayerInspect,
+                    \App\Printers\PrintRequest::OPT_FLOW_CALIBRATION      => $this->useFlowCali,
+                    \App\Printers\PrintRequest::OPT_VIBRATION_CALIBRATION => $this->useVibrationCali,
+                ],
+            ));
+            $started = $taskId !== null;
 
 	    if ($started) {
                 // Záznam do historie - MQTT listener ho podle task_id spáruje,
                 // jakmile se tisk na tiskárně opravdu rozběhne.
                 try {
                     PrintHistoryService::queue(
-                        $printer, $this->file, $this->selectedPlate, $cmd->lastTaskId, auth()->id(),
+                        $printer, $this->file, $this->selectedPlate, $taskId ?: null, auth()->id(),
                         $this->selectedBedPlate ?: ($this->file->metadata['bed_type'] ?? null),
                         $this->selectedBedTemp(),
                         $this->describeOverrides($bed),
@@ -712,8 +703,7 @@ class FileDetailPage extends Component
         }
 
         try {
-            $ftp    = new BambuFtpService($printer);
-            $result = $ftp->upload($localPath, $this->file->original_name);
+            $result = $printer->driver()->uploadFile($localPath, $this->file->original_name);
             if ($result) {
                 $this->dispatch('toast', type: 'success',
                     message: '📤 Soubor odeslán do ' . $printer->name);

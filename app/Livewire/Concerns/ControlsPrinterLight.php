@@ -3,7 +3,6 @@
 namespace App\Livewire\Concerns;
 
 use App\Models\Printer;
-use App\Services\PrinterCommandService;
 
 /**
  * Přepínání světla komory přímo z karty tiskárny (dashboard, přehled tiskáren).
@@ -19,7 +18,7 @@ trait ControlsPrinterLight
         $isOn    = in_array($light['mode'] ?? 'off', ['on', 'flashing'], true);
         $newMode = $isOn ? 'off' : 'on';
 
-        $success = (new PrinterCommandService($printer))->setLight('chamber_light', $newMode);
+        $success = $printer->driver()->setLight('chamber_light', $newMode);
 
         if ($success) {
             // Tiskárna nový stav nahlásí přes MQTT za chvilku - počkáme,

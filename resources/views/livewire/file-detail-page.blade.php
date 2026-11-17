@@ -96,6 +96,30 @@
                                 </div>
                             @endif
                             @php
+                                $sizeX = $currentPlate['size_x'] ?? $file->metadata['size_x'] ?? null;
+                                $sizeY = $currentPlate['size_y'] ?? $file->metadata['size_y'] ?? null;
+                                $sizeZ = $currentPlate['max_z_height'] ?? $file->metadata['max_z_height'] ?? null;
+                                $mm    = fn ($v) => rtrim(rtrim(number_format((float) $v, 1, ',', ''), '0'), ',');
+                            @endphp
+                            @if($sizeX && $sizeY && $sizeZ)
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <p class="text-xs text-gray-400">Rozměry (X × Y × Z)</p>
+                                    <p class="text-sm font-semibold text-gray-700 mt-0.5">📦 {{ $mm($sizeX) }} × {{ $mm($sizeY) }} × {{ $mm($sizeZ) }} mm</p>
+                                </div>
+                            @elseif($sizeZ)
+                                {{-- .bgcode: půdorys neznáme, jen výšku --}}
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <p class="text-xs text-gray-400">Výška modelu</p>
+                                    <p class="text-sm font-semibold text-gray-700 mt-0.5">📦 {{ $mm($sizeZ) }} mm</p>
+                                </div>
+                            @endif
+                            @if(!empty($file->metadata['slicer']))
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <p class="text-xs text-gray-400">Slicer</p>
+                                    <p class="text-sm font-semibold text-gray-700 mt-0.5 truncate" title="{{ $file->metadata['slicer'] }}">🧩 {{ $file->metadata['slicer'] }}</p>
+                                </div>
+                            @endif
+                            @php
                                 $nzTemp    = $currentPlate['nozzle_temp'] ?? $file->metadata['nozzle_temp'] ?? null;
                                 $nzInitial = $currentPlate['nozzle_temp_initial_layer'] ?? $file->metadata['nozzle_temp_initial_layer'] ?? null;
                             @endphp
@@ -539,6 +563,28 @@
 
                 </div>
 
+                @php
+                    $dlgPlateEta = collect($file->metadata['plates'] ?? [])->firstWhere('index', $selectedPlate);
+                    $dlgSeconds  = (int) ($dlgPlateEta['print_time_seconds'] ?? $file->metadata['print_time_seconds'] ?? 0);
+                @endphp
+                @if($dlgSeconds > 0)
+                    {{-- Kdy by tisk skončil, kdyby se spustil teď (obnovuje se každých 30 s) --}}
+                    <div class="px-6 pt-3 text-sm text-gray-600 flex items-center justify-center gap-1.5"
+                        x-data="{
+                            secs: {{ $dlgSeconds }},
+                            now: Date.now(),
+                            eta() {
+                                const d = new Date(this.now + this.secs * 1000);
+                                const t = d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+                                const today = new Date(this.now).toDateString() === d.toDateString();
+                                return today ? 'dnes v ' + t : d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' }) + ' v ' + t;
+                            }
+                        }"
+                        x-init="setInterval(() => now = Date.now(), 30000)">
+                        🏁 Hotovo přibližně <strong x-text="eta()"></strong>
+                        <span class="text-xs text-gray-400">({{ \App\Models\PrintJob::formatSeconds($dlgSeconds) }})</span>
+                    </div>
+                @endif
                 <div class="px-6 py-4 border-t border-gray-100 flex space-x-3">
                     <button wire:click="closePrintDialog"
                         class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 text-sm font-medium">

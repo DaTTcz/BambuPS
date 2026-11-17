@@ -35,7 +35,8 @@ class MqttListenCommand extends Command
                 return 0;
             }
 
-            $printers = Printer::where('enabled', true)->get();
+            // MQTT listener obsluhuje jen tiskárny Bambu - ostatní ovladače mají vlastní
+            $printers = Printer::where('enabled', true)->where('driver', 'bambu')->get();
 
             if ($printers->isEmpty()) {
                 $this->warn('Žádné aktivní tiskárny. Čekám 30s...');

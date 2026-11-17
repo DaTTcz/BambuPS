@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Printers\Contracts\PrinterDriver;
+use App\Printers\PrinterDrivers;
 use Illuminate\Database\Eloquent\Model;
 
 class Printer extends Model
 {
     protected $fillable = [
+        'driver',
+        'connection',
         'name',
         'model',
         'serial_number',
@@ -24,10 +28,32 @@ class Printer extends Model
     protected $casts = [
         'enabled'          => 'boolean',
         'status'           => 'array',
+        'connection'       => 'encrypted:array',
         'pending_ams_kick' => 'array',
         'bed_mesh'         => 'array',
         'last_seen_at'     => 'datetime',
     ];
+
+    private ?PrinterDriver $driverInstance = null;
+
+    /** Ovladač tiskárny (Bambu, PrusaLink...) - přes něj jdou všechny příkazy */
+    public function driver(): PrinterDriver
+    {
+        if (!$this->driverInstance || $this->driverInstance::key() !== ($this->driver ?: 'bambu')) {
+            $this->driverInstance = PrinterDrivers::make($this);
+        }
+        return $this->driverInstance;
+    }
+
+    /** Umí tiskárna danou věc? (konstanty App\Printers\Capability) */
+    public function supports(string $capability): bool
+    {
+        try {
+            return $this->driver()->supports($capability);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
 
     /** Má tiskárna nastavenou vlastní (externí) kameru? */
     public function hasCustomCamera(): bool
@@ -35,12 +61,17 @@ class Printer extends Model
         return trim((string) $this->camera_stream_url) !== '';
     }
 
-    /** Zdroj streamu pro go2rtc - vlastní kamera, jinak vestavěná Bambu kamera */
-    public function cameraSource(): string
+    /** Zdroj streamu pro go2rtc - vlastní kamera, jinak vestavěná kamera tiskárny (podle ovladače) */
+    public function cameraSource(): ?string
     {
-        return $this->hasCustomCamera()
-            ? trim($this->camera_stream_url)
-            : "rtsps://bblp:{$this->access_code}@{$this->ip_address}:322/streaming/live/1";
+        if ($this->hasCustomCamera()) {
+            return trim($this->camera_stream_url);
+        }
+        try {
+            return $this->driver()->cameraSource();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
