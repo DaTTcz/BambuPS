@@ -187,15 +187,36 @@
 
                         @if(!empty($currentPlate['filaments']))
                             <div class="mb-4">
-                                <p class="text-xs text-gray-400 mb-2">Filamenty</p>
+                                @php
+                                    $plateWaste = round(($currentPlate['waste_flush_g'] ?? 0) + ($currentPlate['waste_tower_g'] ?? 0), 1);
+                                    $plateTotal = (float) ($currentPlate['filament_used_g'] ?? 0);
+                                    $g = fn ($v) => rtrim(rtrim(number_format((float) $v, 1, ',', ' '), '0'), ',');
+                                @endphp
+                                <div class="flex items-baseline justify-between gap-2 mb-2">
+                                    <p class="text-xs text-gray-400">Filamenty</p>
+                                    @if($plateWaste > 0 && $plateTotal > 0)
+                                        <p class="text-xs text-gray-500 text-right">
+                                            celkem {{ $g($plateTotal) }} g =
+                                            <span class="text-gray-700 font-medium">model {{ $g(max(0, $plateTotal - $plateWaste)) }} g</span>
+                                            + <span class="text-amber-600 font-medium" title="Proplach {{ $g($currentPlate['waste_flush_g'] ?? 0) }} g · čistící věž {{ $g($currentPlate['waste_tower_g'] ?? 0) }} g">odpad {{ $g($plateWaste) }} g</span>
+                                        </p>
+                                    @endif
+                                </div>
                                 <div class="flex flex-wrap gap-2">
                                     @foreach($currentPlate['filaments'] as $filament)
                                         <div class="flex items-center space-x-1.5 bg-gray-50 rounded-lg px-2 py-1">
                                             <div class="w-4 h-4 rounded-full border border-gray-200 shrink-0"
                                                 style="background-color: {{ $filament['color'] }}"></div>
-					    <span class="text-xs text-gray-600">{{ $filament['type'] }} · {{ $filament['used_g'] }}g
-		                                @if(!empty($filament['used_m'])) · {{ $filament['used_m'] }}m @endif
-                       			    </span>
+                                            <span class="text-xs text-gray-600">
+                                                {{ $filament['type'] }} · {{ $filament['used_g'] }}g
+                                                @if(!empty($filament['used_m'])) · {{ $filament['used_m'] }}m @endif
+                                                @if(!empty($filament['waste_g']) && !empty($filament['used_g']))
+                                                    <span class="block text-gray-400">
+                                                        model {{ $g(max(0, $filament['used_g'] - $filament['waste_g'])) }} g ·
+                                                        <span class="text-amber-600">odpad {{ $g($filament['waste_g']) }} g</span>
+                                                    </span>
+                                                @endif
+                                            </span>
                                         </div>
                                     @endforeach
                                 </div>

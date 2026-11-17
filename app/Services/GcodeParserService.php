@@ -215,6 +215,7 @@ class GcodeParserService
         }
 
         // Výměny filamentu a odpad (proplach + čistící věž)
+        $wasteByTool = [];
         if ($waste->changes() > 0) {
             $w = $waste->result(
                 $this->csvFloats($configData['filament_density'] ?? ''),
@@ -225,6 +226,8 @@ class GcodeParserService
             if ($towerG !== null && (float) $towerG > 0) {
                 $w['waste_tower_g'] = round((float) $towerG, 1);
             }
+            $wasteByTool = $w['waste_by_tool'];
+            unset($w['waste_by_tool']);
             $metadata += $w;
         }
 
@@ -365,6 +368,23 @@ class GcodeParserService
 
         if ($filaments) {
             $metadata['filament_type'] = implode(', ', array_unique(array_column($filaments, 'type')));
+            [$flushSum, $towerSum, $applied] = [0.0, 0.0, false];
+            foreach ($filaments as $fk => $f) {
+                $t    = (int) ($f['tool'] ?? $fk);
+                $used = (float) ($f['used_g'] ?? 0);
+                if (isset($wasteByTool[$t]) && $used > 0) {
+                    $fg = $used * $wasteByTool[$t]['flush'];
+                    $tg = $used * $wasteByTool[$t]['tower'];
+                    $filaments[$fk]['waste_g'] = round($fg + $tg, 1);
+                    $flushSum += $fg;
+                    $towerSum += $tg;
+                    $applied = true;
+                }
+            }
+            if ($applied && empty($footer['total filament used for wipe tower [g]'])) {
+                $metadata['waste_flush_g'] = round($flushSum, 1);
+                $metadata['waste_tower_g'] = round($towerSum, 1);
+            }
             $firstTool = $filaments[0]['tool'] ?? 0;
             $metadata['plates'] = [[
                 'index'              => 1,

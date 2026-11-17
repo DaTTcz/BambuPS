@@ -23,6 +23,8 @@ class GcodeWasteScanner
     /** @var array<int, float> mm filamentu podle nástroje */
     private array $flushMm = [];
     private array $towerMm = [];
+    /** Čistá extruze podle nástroje (včetně retrakcí) - pro poměr odpadu */
+    private array $netMm = [];
 
     private ?int $object = null;
     private ?float $x = null;
@@ -75,6 +77,10 @@ class GcodeWasteScanner
             return;
         }
         $code = strstr($line, ';', true) ?: $line;
+
+        if (str_contains($code, 'E') && preg_match('/ E(-?\d*\.?\d+)/', $code, $me)) {
+            $this->netMm[$this->tool] = ($this->netMm[$this->tool] ?? 0) + (float) $me[1];
+        }
 
         if (($this->inFlush || $this->inTower) && preg_match('/ E(\d*\.?\d+)/', $code, $m)) {
             $e = (float) $m[1];
@@ -131,10 +137,23 @@ class GcodeWasteScanner
             return round($g, 1);
         };
 
+        // Podíl odpadu na celkové spotřebě po nástrojích (index jako v gcode:
+        // M620 S{n} / T{n}). Parser ho vynásobí spotřebou ze sliceru, aby
+        // odpad nikdy nepřesáhl spotřebu filamentu.
+        $byTool = [];
+        foreach (array_keys($this->flushMm + $this->towerMm) as $tool) {
+            $net = max($this->netMm[$tool] ?? 0, ($this->flushMm[$tool] ?? 0) + ($this->towerMm[$tool] ?? 0), 0.001);
+            $byTool[$tool] = [
+                'flush' => ($this->flushMm[$tool] ?? 0) / $net,
+                'tower' => ($this->towerMm[$tool] ?? 0) / $net,
+            ];
+        }
+
         return [
             'filament_changes' => $this->changes,
             'waste_flush_g'    => $grams($this->flushMm),
             'waste_tower_g'    => $grams($this->towerMm),
+            'waste_by_tool'    => $byTool,
         ];
     }
 }

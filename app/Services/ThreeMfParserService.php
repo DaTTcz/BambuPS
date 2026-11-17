@@ -11,7 +11,7 @@ class ThreeMfParserService
      * Soubory se starší verzí se znovu načtou (bambups:reparse po aktualizaci,
      * případně při otevření detailu souboru).
      */
-    public const VERSION = 6;
+    public const VERSION = 8;
 
     public function parse(string $filePath): array
     {
@@ -461,6 +461,26 @@ class ThreeMfParserService
             $seq = $sequences["plate_{$pl['index']}"]['sequence'] ?? null;
             if (is_array($seq) && count($seq) > 1) {
                 $w['filament_changes'] = count($seq) - 1;
+            }
+            // Odpad ke konkrétním filamentům desky (extruder_index = index v gcode)
+            $byTool = $w['waste_by_tool'];
+            unset($w['waste_by_tool']);
+            [$flushSum, $towerSum, $applied] = [0.0, 0.0, false];
+            foreach ($metadata['plates'][$pi]['filaments'] ?? [] as $fk => $f) {
+                $tool = (int) ($f['extruder_index'] ?? $fk);
+                $used = (float) ($f['used_g'] ?? 0);
+                if (isset($byTool[$tool]) && $used > 0) {
+                    $fg = $used * $byTool[$tool]['flush'];
+                    $tg = $used * $byTool[$tool]['tower'];
+                    $metadata['plates'][$pi]['filaments'][$fk]['waste_g'] = round($fg + $tg, 1);
+                    $flushSum += $fg;
+                    $towerSum += $tg;
+                    $applied = true;
+                }
+            }
+            if ($applied) {
+                $w['waste_flush_g'] = round($flushSum, 1);
+                $w['waste_tower_g'] = round($towerSum, 1);
             }
             if ($w['filament_changes'] > 0) {
                 $metadata['plates'][$pi] += $w;
