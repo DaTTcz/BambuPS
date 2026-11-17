@@ -11,7 +11,7 @@ class ThreeMfParserService
      * Soubory se starší verzí se znovu načtou (bambups:reparse po aktualizaci,
      * případně při otevření detailu souboru).
      */
-    public const VERSION = 8;
+    public const VERSION = 9;
 
     public function parse(string $filePath): array
     {
@@ -438,10 +438,16 @@ class ThreeMfParserService
             fclose($stream);
 
             // Objekty s půdorysem (pořadí ze slice_info, bbox z gcode)
-            $boxes = $scanner->objects();
-            $objs  = [];
+            $boxes    = $scanner->objects();
+            $outlines = $scanner->outlines();
+            $objs     = [];
             foreach ($plateObjects[$pl['index']] ?? [] as $oid => $oname) {
-                $objs[] = ['id' => $oid, 'name' => $oname, 'bbox' => $boxes[$oid] ?? null];
+                $objs[] = array_filter([
+                    'id'      => $oid,
+                    'name'    => $oname,
+                    'bbox'    => $boxes[$oid] ?? null,
+                    'outline' => $outlines[$oid] ?? null,   // obrys 1. vrstvy
+                ], fn ($v) => $v !== null);
             }
             if (count($objs) >= 2) {
                 $metadata['plates'][$pi]['objects_info'] = $objs;

@@ -44,15 +44,33 @@
                 @endphp
                 <g wire:key="obj-map-{{ $o['id'] }}" @if(!$isLock) wire:click="{{ $action }}({{ $o['id'] }})" @if($confirm) wire:confirm="{{ $confirm }}" @endif style="cursor: pointer;" @endif>
                     <title>#{{ $n + 1 }} {{ $o['name'] }}{{ $isSkip ? ' – vynecháno' : '' }}</title>
-                    <rect x="{{ $rx }}" y="{{ $ry }}" width="{{ $rw }}" height="{{ $rh }}" rx="{{ $size / 120 }}"
-                        fill="{{ $isSkip ? '#ef4444' : '#22c55e' }}" fill-opacity="{{ $isSkip ? 0.15 : 0.35 }}"
-                        stroke="{{ $isSkip ? '#ef4444' : '#16a34a' }}" stroke-width="{{ $size / 160 }}"/>
+                    @if(!empty($o['outline']))
+                        {{-- Skutečný obrys 1. vrstvy (vnější stěny), díry přes evenodd --}}
+                        @php
+                            $d = '';
+                            foreach ($o['outline'] as $loop) {
+                                for ($i = 0, $c = count($loop); $i < $c; $i += 2) {
+                                    $d .= ($i === 0 ? 'M' : 'L') . $loop[$i] . ' ' . round($bedH - $loop[$i + 1], 1) . ' ';
+                                }
+                                $d .= 'Z ';
+                            }
+                        @endphp
+                        <path d="{{ trim($d) }}" fill-rule="evenodd"
+                            fill="{{ $isSkip ? '#ef4444' : '#22c55e' }}" fill-opacity="{{ $isSkip ? 0.2 : 0.45 }}"
+                            stroke="{{ $isSkip ? '#ef4444' : '#16a34a' }}" stroke-width="{{ $size / 220 }}" stroke-linejoin="round"/>
+                    @else
+                        <rect x="{{ $rx }}" y="{{ $ry }}" width="{{ $rw }}" height="{{ $rh }}" rx="{{ $size / 120 }}"
+                            fill="{{ $isSkip ? '#ef4444' : '#22c55e' }}" fill-opacity="{{ $isSkip ? 0.15 : 0.35 }}"
+                            stroke="{{ $isSkip ? '#ef4444' : '#16a34a' }}" stroke-width="{{ $size / 160 }}"/>
+                    @endif
                     @if($isSkip)
                         <line x1="{{ $rx }}" y1="{{ $ry }}" x2="{{ $rx + $rw }}" y2="{{ $ry + $rh }}" stroke="#ef4444" stroke-width="{{ $size / 200 }}"/>
                         <line x1="{{ $rx + $rw }}" y1="{{ $ry }}" x2="{{ $rx }}" y2="{{ $ry + $rh }}" stroke="#ef4444" stroke-width="{{ $size / 200 }}"/>
                     @endif
                     <text x="{{ $rx + $rw / 2 }}" y="{{ $ry + $rh / 2 }}" text-anchor="middle" dominant-baseline="central"
-                        font-size="{{ $font }}" font-weight="700" fill="{{ $isSkip ? '#b91c1c' : '#14532d' }}">{{ $n + 1 }}</text>
+                        font-size="{{ $font }}" font-weight="700" fill="{{ $isSkip ? '#fca5a5' : '#f0fdf4' }}"
+                        stroke="{{ $isSkip ? '#7f1d1d' : '#14532d' }}" stroke-width="{{ $font / 12 }}" paint-order="stroke"
+                        style="pointer-events: none;">{{ $n + 1 }}</text>
                 </g>
             @endforeach
         </svg>

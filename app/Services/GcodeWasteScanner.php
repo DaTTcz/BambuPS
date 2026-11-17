@@ -32,6 +32,11 @@ class GcodeWasteScanner
     /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> id => [minX, minY, maxX, maxY] */
     private array $objects = [];
 
+    /** Obrys 1. vrstvy: vnější stěny objektů jako lomené čáry, id => [[x,y,x,y,...], ...] */
+    private array $outlines = [];
+    private int $layer = 0;
+    private string $feature = '';
+
     public function feed(string $line): void
     {
         if ($line === '') {
@@ -54,6 +59,12 @@ class GcodeWasteScanner
             if (preg_match('/^;\s?(?:TYPE|FEATURE):\s*(.+)$/', $line, $m)) {
                 $f = strtolower(trim($m[1]));
                 $this->inTower = $f === 'prime tower' || $f === 'wipe tower';
+                $this->feature = $f;
+                return;
+            }
+            // Vrstvy (Bambu/Orca "; CHANGE_LAYER", PrusaSlicer ";LAYER_CHANGE")
+            if ($line === '; CHANGE_LAYER' || $line === ';LAYER_CHANGE') {
+                $this->layer++;
             }
             return;
         }
@@ -105,8 +116,63 @@ class GcodeWasteScanner
                 max($b[2], $this->x, $tx), max($b[3], $this->y, $ty),
             ];
         }
+        // Obrys 1. vrstvy z vnějších stěn
+        if ($this->layer === 1 && $this->object !== null
+            && ($this->feature === 'outer wall' || $this->feature === 'external perimeter')
+            && ($nx !== null || $ny !== null) && $this->x !== null && $this->y !== null
+            && preg_match('/ E(\d*\.?\d+)/', $code)) {
+            $id  = $this->object;
+            $tx  = $nx ?? $this->x;
+            $ty  = $ny ?? $this->y;
+            $cur = &$this->outlines[$id];
+            $last = $cur ? count($cur) - 1 : -1;
+            $lp   = $last >= 0 ? $cur[$last] : null;
+            $n    = $lp ? count($lp) : 0;
+            if ($lp && abs($lp[$n - 2] - $this->x) < 0.01 && abs($lp[$n - 1] - $this->y) < 0.01) {
+                // navazuje - přidat bod (body bližší než 0,4 mm vynechat)
+                if (abs($lp[$n - 2] - $tx) + abs($lp[$n - 1] - $ty) >= 0.4) {
+                    $cur[$last][] = $tx;
+                    $cur[$last][] = $ty;
+                } else {
+                    $cur[$last][$n - 2] = $tx;
+                    $cur[$last][$n - 1] = $ty;
+                }
+            } else {
+                $cur[] = [$this->x, $this->y, $tx, $ty];
+            }
+            unset($cur);
+        }
+
         if ($nx !== null) $this->x = $nx;
         if ($ny !== null) $this->y = $ny;
+    }
+
+    /**
+     * Obrysy 1. vrstvy po objektech, zjednodušené (max ~400 bodů na objekt).
+     * @return array<int, array<int, float[]>> id => [[x,y,x,y,...], ...]
+     */
+    public function outlines(): array
+    {
+        $out = [];
+        foreach ($this->outlines as $id => $loops) {
+            $loops  = array_values(array_filter($loops, fn ($l) => count($l) >= 6)); // aspoň 3 body
+            $points = array_sum(array_map('count', $loops)) / 2;
+            $step   = max(1, (int) ceil($points / 400));
+            foreach ($loops as $loop) {
+                $simple = [];
+                $cnt    = count($loop) / 2;
+                for ($i = 0; $i < $cnt; $i++) {
+                    if ($i % $step === 0 || $i === $cnt - 1) {
+                        $simple[] = round($loop[$i * 2], 1);
+                        $simple[] = round($loop[$i * 2 + 1], 1);
+                    }
+                }
+                if (count($simple) >= 6) {
+                    $out[$id][] = $simple;
+                }
+            }
+        }
+        return $out;
     }
 
     /** @return array<int, array{0: float, 1: float, 2: float, 3: float}> id objektu => [minX, minY, maxX, maxY] */
