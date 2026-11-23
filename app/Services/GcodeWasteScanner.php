@@ -37,6 +37,13 @@ class GcodeWasteScanner
     private int $layer = 0;
     private string $feature = '';
 
+    // Odhad času pohybů (vzdálenost / rychlost) - pro podíl objektů na čase tisku
+    private float $z = 0.0;
+    private float $feed = 3000.0;          // mm/min (modální F)
+    private float $totalTime = 0.0;        // s
+    /** @var array<int, float> id objektu => s */
+    private array $objectTime = [];
+
     public function feed(string $line): void
     {
         if ($line === '') {
@@ -89,6 +96,7 @@ class GcodeWasteScanner
         }
         $code = strstr($line, ';', true) ?: $line;
 
+        $me = [];
         if (str_contains($code, 'E') && preg_match('/ E(-?\d*\.?\d+)/', $code, $me)) {
             $this->netMm[$this->tool] = ($this->netMm[$this->tool] ?? 0) + (float) $me[1];
         }
@@ -105,6 +113,27 @@ class GcodeWasteScanner
         // Poloha a půdorys objektu (extruze uvnitř bloku objektu)
         $nx = str_contains($code, 'X') && preg_match('/ X(-?[\d.]+)/', $code, $mx) ? (float) $mx[1] : null;
         $ny = str_contains($code, 'Y') && preg_match('/ Y(-?[\d.]+)/', $code, $my) ? (float) $my[1] : null;
+
+        // Čas pohybu
+        if (str_contains($code, 'F') && preg_match('/ F([\d.]+)/', $code, $mf) && (float) $mf[1] > 0) {
+            $this->feed = (float) $mf[1];
+        }
+        $nz = str_contains($code, 'Z') && preg_match('/ Z(-?[\d.]+)/', $code, $mz) ? (float) $mz[1] : null;
+        $dx = $nx !== null && $this->x !== null ? $nx - $this->x : 0.0;
+        $dy = $ny !== null && $this->y !== null ? $ny - $this->y : 0.0;
+        $dz = $nz !== null ? $nz - $this->z : 0.0;
+        $dist = sqrt($dx * $dx + $dy * $dy + $dz * $dz);
+        if ($dist == 0.0 && isset($me[1])) {
+            $dist = abs((float) $me[1]); // jen extruze / retrakce
+        }
+        if ($dist > 0) {
+            $t = $dist / ($this->feed / 60);
+            $this->totalTime += $t;
+            if ($this->object !== null) {
+                $this->objectTime[$this->object] = ($this->objectTime[$this->object] ?? 0) + $t;
+            }
+        }
+        if ($nz !== null) $this->z = $nz;
         if ($this->object !== null && ($nx !== null || $ny !== null)
             && preg_match('/ E(\d*\.?\d+)/', $code) && $this->x !== null && $this->y !== null) {
             $id = $this->object;
@@ -173,6 +202,15 @@ class GcodeWasteScanner
             }
         }
         return $out;
+    }
+
+    /** Podíl objektů na odhadnutém čase tisku: id => 0..1 */
+    public function timeShares(): array
+    {
+        if ($this->totalTime <= 0) {
+            return [];
+        }
+        return array_map(fn ($t) => round($t / $this->totalTime, 4), $this->objectTime);
     }
 
     /** @return array<int, array{0: float, 1: float, 2: float, 3: float}> id objektu => [minX, minY, maxX, maxY] */

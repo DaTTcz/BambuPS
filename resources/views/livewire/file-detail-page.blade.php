@@ -207,13 +207,15 @@
                                         <div class="flex items-center space-x-1.5 bg-gray-50 rounded-lg px-2 py-1">
                                             <div class="w-4 h-4 rounded-full border border-gray-200 shrink-0"
                                                 style="background-color: {{ $filament['color'] }}"></div>
-                                            <span class="text-xs text-gray-600">
+                                            <span class="text-xs text-gray-500">
                                                 {{ $filament['type'] }} · {{ $filament['used_g'] }}g
                                                 @if(!empty($filament['used_m'])) · {{ $filament['used_m'] }}m @endif
                                                 @if(!empty($filament['waste_g']) && !empty($filament['used_g']))
-                                                    <span class="block text-gray-400">
-                                                        model {{ $g(max(0, $filament['used_g'] - $filament['waste_g'])) }} g ·
-                                                        <span class="text-amber-600">odpad {{ $g($filament['waste_g']) }} g</span>
+                                                    {{-- Barvy jako v souhrnu: celkem šedě, model zvýrazněně, odpad oranžově --}}
+                                                    <span class="block">
+                                                        <span class="text-gray-700 font-medium">model {{ $g(max(0, $filament['used_g'] - $filament['waste_g'])) }} g</span>
+                                                        <span class="text-gray-400">·</span>
+                                                        <span class="text-amber-600 font-medium">odpad {{ $g($filament['waste_g']) }} g</span>
                                                     </span>
                                                 @endif
                                             </span>
@@ -486,7 +488,7 @@
                                 'skipped' => $skipObjects,
                                 'action'  => 'toggleSkipObject',
                             ])
-                            <p class="text-xs text-gray-400 mt-1">Kliknutím na objekt ho vynecháš. Tiskárna ho přeskočí, soubor zůstane beze změny.</p>
+                            <p class="text-xs text-gray-400 mt-1">Kliknutím na objekt ho vynecháš. Do tiskárny se pošle upravená kopie souboru bez vynechaných objektů, originál zůstane beze změny.</p>
                         </div>
                     @endif
 
@@ -618,6 +620,10 @@
                 @php
                     $dlgPlateEta = collect($file->metadata['plates'] ?? [])->firstWhere('index', $selectedPlate);
                     $dlgSeconds  = (int) ($dlgPlateEta['print_time_seconds'] ?? $file->metadata['print_time_seconds'] ?? 0);
+                    // Vynechané objekty zkrátí tisk o svůj podíl na čase
+                    $dlgSkipShare = collect($dlgPlateEta['objects_info'] ?? [])
+                        ->whereIn('id', $skipObjects)->sum(fn ($o) => (float) ($o['time_share'] ?? 0));
+                    $dlgSeconds   = (int) round($dlgSeconds * max(0.05, 1 - $dlgSkipShare));
                 @endphp
                 @if($dlgSeconds > 0)
                     {{-- Kdy by tisk skončil, kdyby se spustil teď (obnovuje se každých 30 s) --}}
@@ -634,7 +640,7 @@
                         }"
                         x-init="setInterval(() => now = Date.now(), 30000)">
                         🏁 Hotovo přibližně <strong x-text="eta()"></strong>
-                        <span class="text-xs text-gray-400">({{ \App\Models\PrintJob::formatSeconds($dlgSeconds) }})</span>
+                        <span class="text-xs text-gray-400">({{ \App\Models\PrintJob::formatSeconds($dlgSeconds) }}{{ $dlgSkipShare > 0 ? ' bez vynechaných objektů' : '' }})</span>
                     </div>
                 @endif
                 <div class="px-6 py-4 border-t border-gray-100 flex space-x-3">

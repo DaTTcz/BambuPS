@@ -30,6 +30,9 @@ class PrintHistoryService
     /** Poslední zpracovaný [stav, task_id] na tiskárnu - drží se v paměti listeneru */
     private static array $lastSeen = [];
 
+    /** Jak dlouho po startu může tiskárna hlásit ještě task_id předchozí úlohy (min) */
+    private const PREPARE_MINUTES = 15;
+
     public static function queue(
         Printer $printer,
         File $file,
@@ -60,6 +63,17 @@ class PrintHistoryService
 
         $estimated = $plate['print_time_seconds']
             ?? (count($plates) <= 1 ? ($file->metadata['print_time_seconds'] ?? null) : null);
+        // Vynechané objekty zkracují tisk o svůj podíl na čase
+        $skipIds = array_map('intval', $options['skip_objects'] ?? []);
+        if ($estimated && $skipIds) {
+            $share = 0.0;
+            foreach ($plate['objects_info'] ?? [] as $o) {
+                if (in_array((int) $o['id'], $skipIds, true)) {
+                    $share += (float) ($o['time_share'] ?? 0);
+                }
+            }
+            $estimated = (int) round($estimated * max(0.05, 1 - $share));
+        }
 
         $data = [
             'file_id'           => $file->id,
@@ -89,8 +103,24 @@ class PrintHistoryService
                 ->first();
             if ($already) {
                 $already->update($data);
+                self::fillMeshBedType($printer, $already->fresh());
                 return $already;
             }
+        }
+
+        // Listener mohl tisk zachytit dřív a se starým task_id (tiskárna ho
+        // v přípravě chvíli hlásí od předchozí úlohy) založit jako externí -
+        // čerstvý externí tisk je ve skutečnosti tenhle.
+        $recentExternal = PrintJob::where('printer_id', $printer->id)
+            ->where('status', PrintJob::STATUS_RUNNING)
+            ->where('source', 'external')
+            ->where('started_at', '>', now()->subMinutes(2))
+            ->latest('id')
+            ->first();
+        if ($recentExternal) {
+            $recentExternal->update($data + ['task_id' => $taskId ?: $recentExternal->task_id]);
+            self::fillMeshBedType($printer, $recentExternal->fresh());
+            return $recentExternal;
         }
 
         // Starší neodstartované záznamy pro tuhle tiskárnu už nemají smysl
@@ -147,11 +177,12 @@ class PrintHistoryService
 
                 // Ve fázi PREPARE tiskárna chvíli hlásí ještě task_id předchozí
                 // úlohy - záznam založený v posledních minutách je tentýž tisk,
-                // jen teď dostal správné task_id.
-                if ($open->started_at && $open->started_at->gt(now()->subMinutes(3))) {
+                // jen teď dostal správné task_id. Příprava (ohřev, měření
+                // podložky, kalibrace) umí trvat i přes 10 minut.
+                if ($open->started_at && $open->started_at->gt(now()->subMinutes(self::PREPARE_MINUTES))) {
                     if ($queued) {
                         $open->delete();
-                        $this->promote($queued, $status);
+                        $this->promote($queued, $status, (bool) $open->bed_leveled);
                     } else {
                         $open->update([
                             'task_id' => $taskId,
@@ -173,6 +204,12 @@ class PrintHistoryService
         }
 
         if ($open) {
+            // Zastaralý stav předchozí úlohy (FINISH/FAILED se starým task_id)
+            // těsně po startu nového tisku neukončí
+            if ($taskId !== '' && $open->task_id && $open->task_id !== $taskId
+                && $open->started_at && $open->started_at->gt(now()->subMinutes(self::PREPARE_MINUTES))) {
+                return;
+            }
             $result = match ($state) {
                 'FINISH' => PrintJob::STATUS_FINISHED,
                 'FAILED' => ((int) ($status['print_error'] ?? 0) === self::ERROR_CANCELLED)
@@ -186,19 +223,54 @@ class PrintHistoryService
 
     private function findQueued(Printer $printer, string $taskId): ?PrintJob
     {
-        if ($taskId === '') {
-            return null;
+        if ($taskId !== '') {
+            $job = PrintJob::where('printer_id', $printer->id)
+                ->where('status', PrintJob::STATUS_QUEUED)
+                ->where('task_id', $taskId)
+                ->latest('id')
+                ->first();
+            if ($job) {
+                return $job;
+            }
         }
 
+        // Tiskárna hlásí jiné task_id (ještě to staré od předchozí úlohy) -
+        // čerstvě odeslaný tisk z appky je ale ten, který se právě rozbíhá.
+        // queue() starší neodstartované záznamy maže, takže je nanejvýš jeden.
         return PrintJob::where('printer_id', $printer->id)
             ->where('status', PrintJob::STATUS_QUEUED)
-            ->where('task_id', $taskId)
+            ->where('created_at', '>', now()->subMinutes(5))
             ->latest('id')
             ->first();
     }
 
+    /**
+     * Měření podložky proběhlo, když byl tisk ještě veden jako externí (bez
+     * typu podložky) - po spárování s úlohou z appky ho doplníme.
+     */
+    private static function fillMeshBedType(?Printer $printer, ?PrintJob $job): void
+    {
+        if (!$printer) {
+            return;
+        }
+        $mesh = $printer->fresh()->bed_mesh ?? [];
+        if (!$job || !$job->bed_type || !empty($mesh['bed_type']) || empty($mesh['measured_at'])) {
+            return;
+        }
+        if (!$job->started_at || \Carbon\Carbon::parse($mesh['measured_at'])->lt($job->started_at->copy()->subMinute())) {
+            return; // měření patří k jinému tisku
+        }
+        $mesh['bed_type'] = $job->bed_type;
+        $mesh['bed_temp'] = $mesh['bed_temp'] ?? $job->bed_temp;
+        if (($mesh['valid'] ?? false) === false && ($mesh['reason'] ?? null) === null) {
+            $mesh['valid'] = true;
+        }
+        $printer->update(['bed_mesh' => $mesh]);
+        $job->update(['bed_leveled' => true]);
+    }
+
     /** Tisk odeslaný z appky se opravdu rozběhl */
-    private function promote(PrintJob $job, array $status): void
+    private function promote(PrintJob $job, array $status, bool $bedLeveled = false): void
     {
         $remainingMin = $status['mc_remaining_time'] ?? null;
         $percent      = (int) ($status['mc_percent'] ?? 0);
@@ -210,6 +282,9 @@ class PrintHistoryService
                 ?? ($remainingMin && $percent <= 1 ? (int) $remainingMin * 60 : null),
             'total_layers'      => $job->total_layers ?? ($status['total_layer_num'] ?? null),
         ]);
+        if ($bedLeveled) {
+            self::fillMeshBedType(Printer::find($job->printer_id), $job->fresh());
+        }
     }
 
     /** Tisk spuštěný mimo appku (Bambu Studio, OrcaSlicer, displej, Handy) */

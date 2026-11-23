@@ -554,7 +554,9 @@ class FileDetailPage extends Component
                 return; // chyba už je v toastu
             }
 
-            if ($bed || $nozzleMap) {
+            // Vynechané objekty se z gcode odstraní ještě před odesláním
+            // (spolehlivější než příkaz tiskárně po startu tisku)
+            if ($bed || $nozzleMap || $this->skipObjects) {
                 $patcher     = new \App\Services\GcodePatcherService();
                 $patchedPath = $patcher->patch(
                     $localPath,
@@ -562,6 +564,7 @@ class FileDetailPage extends Component
                     $bed,
                     $nozzleMap,
                     $this->file->metadata['printer_model'] ?? null,
+                    $this->skipObjects,
                 );
                 $uploadPath = $patchedPath;
                 \Log::info('Gcode upraven před tiskem: ' . implode('; ', $patcher->notes));
@@ -634,6 +637,8 @@ class FileDetailPage extends Component
                             'ams'               => array_map(fn ($m) => ['ams' => (int) $m['ams'], 'slot' => (int) $m['slot']], $this->amsMapping),
                             // Objekty vynechané před tiskem - MQTT listener je pošle tiskárně
                             'skip_objects'      => $this->skipObjects,
+                            // odstraněno už z gcode - tiskárně se nic neposílá
+                            'skip_mode'         => 'gcode',
                         ],
                     );
                 } catch (\Throwable $e) {

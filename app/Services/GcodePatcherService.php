@@ -20,6 +20,9 @@ class GcodePatcherService
     /** Poznámky o tom, co se v posledním patchi změnilo (pro log / toast) */
     public array $notes = [];
 
+    /** Poměr odhadnutého času po vynechání objektů (1 = beze změny) */
+    public float $timeRatio = 1.0;
+
     /**
      * Upraví kopii souboru pro tisk na jinou fyzickou podložku, než pro jakou
      * byl soubor naslicovaný:
@@ -62,11 +65,15 @@ class GcodePatcherService
      *
      * @param array|null $bed        ['fromPlate', 'toPlate', 'from' => [initial, other], 'to' => [initial, other]]
      * @param array      $nozzleMap  ['first' => [°C => °C], 'rest' => [°C => °C], 'insert' => °C|null], viz patchNozzleContent
+     * @param int[]      $skipObjects ID objektů (unique label id), které se z gcode odstraní
      * @return string Cesta k dočasnému patchnutému souboru (smaž po použití!)
      */
-    public function patch(string $sourcePath, int $plateIndex, ?array $bed, array $nozzleMap = [], ?string $printerModel = null): string
+    public function patch(string $sourcePath, int $plateIndex, ?array $bed, array $nozzleMap = [], ?string $printerModel = null, array $skipObjects = []): string
     {
-        $this->notes = [];
+        $this->notes     = [];
+        $this->timeRatio = 1.0;
+        // gcode velkých projektů má desítky MB a pracuje se s ním v paměti
+        @ini_set('memory_limit', '1024M');
 
         $tempPath = tempnam(sys_get_temp_dir(), 'bambups_patch_') . '.3mf';
         if (!copy($sourcePath, $tempPath)) {
@@ -91,6 +98,22 @@ class GcodePatcherService
             }
             if ($nozzleMap) {
                 $content = $this->patchNozzleContent($content, $nozzleMap);
+            }
+            if ($skipObjects) {
+                $content = $this->patchSkipObjectsContent($content, $skipObjects);
+
+                // Odhad času v slice_info (tiskárna ho ukáže při startu)
+                $si = $zip->getFromName('Metadata/slice_info.config');
+                if ($si !== false && $this->timeRatio < 1.0) {
+                    $si = preg_replace_callback('/<plate>.*?<\/plate>/s', function ($pm) use ($plateIndex) {
+                        if (!preg_match('/key="index" value="' . $plateIndex . '"/', $pm[0])) {
+                            return $pm[0];
+                        }
+                        return preg_replace_callback('/(key="prediction" value=")(\d+)(")/', fn ($x) =>
+                            $x[1] . (int) round($x[2] * $this->timeRatio) . $x[3], $pm[0]);
+                    }, $si);
+                    $zip->addFromString('Metadata/slice_info.config', $si);
+                }
             }
 
             $zip->addFromString($gcodeEntry, $content);
@@ -321,6 +344,151 @@ class GcodePatcherService
             }
         }
         return null;
+    }
+
+    /**
+     * Odstraní z gcode vynechané objekty.
+     *
+     * Bambu/Orca obalují každý objekt v každé vrstvě do bloku
+     * "M624 <maska>" ... "M625", kde maska (base64, 64 bitů) říká, kterým
+     * objektům blok patří. Stejné bloky přeskakuje firmware, když se objekt
+     * vynechá během tisku. Tady se odstraní pohyby (G0-G3) z bloků, jejichž
+     * všechny objekty jsou vynechané; M-příkazy (ventilátor, teploty,
+     * průběh) zůstávají. Každý blok si na začátku sám nastaví Z, XY i
+     * vytažení filamentu, takže vynechání nenaruší zbytek tisku.
+     */
+    private function patchSkipObjectsContent(string $content, array $skipIds): string
+    {
+        // ID objektu -> bit masky ("; start printing object, unique label id: N" + M624 hned za ním)
+        preg_match_all('/^; start printing object, unique label id: (\d+)\r?\n(?:;[^\n]*\n)*M624 (\S+)/m', $content, $mm, PREG_SET_ORDER);
+        $bitOf = [];
+        foreach ($mm as $m) {
+            $mask = $this->maskValue($m[2]);
+            if ($mask !== 0 && ($mask & ($mask - 1)) === 0 && !isset($bitOf[(int) $m[1]])) {
+                $bitOf[(int) $m[1]] = $mask;
+            }
+        }
+
+        $skipMask = 0;
+        foreach (array_unique(array_map('intval', $skipIds)) as $id) {
+            if (!isset($bitOf[$id])) {
+                throw new \RuntimeException('Objekt nejde vynechat - soubor nemá značky objektů. Slicuj ho se zapnutým "Label objects".');
+            }
+            $skipMask |= $bitOf[$id];
+        }
+        if ($skipMask === 0) {
+            return $content;
+        }
+
+        $out     = fopen('php://temp/maxmemory:' . (128 * 1024 * 1024), 'w+');
+        $stack   = [];
+        $removed = 0;
+        $pos     = 0;
+        $len     = strlen($content);
+
+        // Odhad času pro přepočet průběhu (M73 P.. R..): původní a upravený soubor
+        $orig  = ['x' => null, 'y' => null, 'z' => 0.0, 'f' => 3000.0];
+        $kept  = $orig;
+        $segO  = [0.0];   // čas po jednotlivých M73 (s)
+        $segK  = [0.0];
+        $m73R  = [];      // původní zbývající minuty u každého M73
+        $moveTime = function (array &$st, string $code): float {
+            preg_match_all('/([XYZEF])(-?[\d.]+)/', $code, $mm, PREG_SET_ORDER);
+            $v = [];
+            foreach ($mm as $m) {
+                $v[$m[1]] = (float) $m[2];
+            }
+            if (isset($v['F']) && $v['F'] > 0) {
+                $st['f'] = $v['F'];
+            }
+            $dx = isset($v['X']) && $st['x'] !== null ? $v['X'] - $st['x'] : 0.0;
+            $dy = isset($v['Y']) && $st['y'] !== null ? $v['Y'] - $st['y'] : 0.0;
+            $dz = isset($v['Z']) ? $v['Z'] - $st['z'] : 0.0;
+            $d  = sqrt($dx * $dx + $dy * $dy + $dz * $dz);
+            if ($d == 0.0 && isset($v['E'])) {
+                $d = abs($v['E']);
+            }
+            if (isset($v['X'])) $st['x'] = $v['X'];
+            if (isset($v['Y'])) $st['y'] = $v['Y'];
+            if (isset($v['Z'])) $st['z'] = $v['Z'];
+            return $d > 0 ? $d / ($st['f'] / 60) : 0.0;
+        };
+
+        while ($pos < $len) {
+            $nl   = strpos($content, "\n", $pos);
+            $end  = $nl === false ? $len : $nl + 1;
+            $line = substr($content, $pos, $end - $pos);
+            $pos  = $end;
+
+            if (str_starts_with($line, 'M624 ')) {
+                $stack[] = $this->maskValue(strtok(substr($line, 5), " \t\r\n;"));
+            } elseif (str_starts_with($line, 'M625')) {
+                array_pop($stack);
+            } elseif (preg_match('/^M73 P\d+ R(\d+)/', $line, $mr)) {
+                // průběh a zbývající čas - přepíše se po spočítání času
+                $m73R[] = (int) $mr[1];
+                $segO[] = 0.0;
+                $segK[] = 0.0;
+                fwrite($out, "\x00M73#" . (count($m73R) - 1) . "\n");
+                continue;
+            } elseif (($line[0] ?? '') === 'G' && preg_match('/^G[0-3](?:\s|$)/', $line)) {
+                $code = strstr($line, ';', true) ?: $line;
+                $segO[count($segO) - 1] += $moveTime($orig, $code);
+                $top = $stack ? end($stack) : 0;
+                // Blok patří jen vynechaným objektům -> pohyb vynechat
+                if ($top !== 0 && ($top & ~$skipMask) === 0) {
+                    $removed++;
+                    continue;
+                }
+                $segK[count($segK) - 1] += $moveTime($kept, $code);
+            }
+            fwrite($out, $line);
+        }
+
+        rewind($out);
+        $result = stream_get_contents($out);
+        fclose($out);
+
+        if ($removed === 0) {
+            throw new \RuntimeException('Vynechané objekty se v gcode nepodařilo najít - soubor nebyl upraven.');
+        }
+
+        // Přepočet průběhu: zbývající čas u každého M73 se zkrátí v poměru
+        // odhadnutého času zbytku tisku (upravený / původní)
+        $n      = count($m73R);
+        $sufO   = array_fill(0, $n + 1, 0.0);
+        $sufK   = array_fill(0, $n + 1, 0.0);
+        for ($k = $n - 1; $k >= 0; $k--) {
+            $sufO[$k] = $sufO[$k + 1] + $segO[$k + 1];
+            $sufK[$k] = $sufK[$k + 1] + $segK[$k + 1];
+        }
+        $newR = [];
+        for ($k = 0; $k < $n; $k++) {
+            $newR[$k] = $sufO[$k] > 0 ? (int) round($m73R[$k] * $sufK[$k] / $sufO[$k]) : $m73R[$k];
+        }
+        $total  = max(1, $newR[0] ?? 1);
+        $result = preg_replace_callback('/^\x00M73#(\d+)$/m', function ($m) use ($newR, $total) {
+            $r = $newR[(int) $m[1]];
+            return 'M73 P' . max(0, min(100, (int) round(100 * (1 - $r / $total)))) . ' R' . $r;
+        }, $result);
+
+        $totalO = array_sum($segO);
+        $this->timeRatio = $totalO > 0 ? array_sum($segK) / $totalO : 1.0;
+
+        $this->notes[] = 'vynecháno objektů: ' . count(array_unique($skipIds)) . " ({$removed} řádků pohybu, čas × "
+            . round($this->timeRatio, 2) . ')';
+
+        return $result;
+    }
+
+    /** Maska objektů z M624 (base64, 8 bajtů little-endian) */
+    private function maskValue(string|false $b64): int
+    {
+        $raw = $b64 === false ? false : base64_decode($b64, true);
+        if ($raw === false || $raw === '') {
+            return 0;
+        }
+        return unpack('P', str_pad(substr($raw, 0, 8), 8, "\0"))[1];
     }
 
     /** Úprava gcode pro jinou podložku (popis viz patchForBedPlate) */

@@ -289,7 +289,8 @@ class MqttListenCommand extends Command
             ->latest('id')
             ->first();
         $wanted = array_map('intval', $job?->options['skip_objects'] ?? []);
-        if (!$wanted) {
+        // Objekty odstraněné už z gcode před odesláním se tiskárně neposílají
+        if (!$wanted || ($job->options['skip_mode'] ?? 'mqtt') === 'gcode') {
             return;
         }
 

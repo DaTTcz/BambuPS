@@ -178,7 +178,11 @@ class PrinterDetail extends Component
             'job'     => $job,
             'objects' => $objects,
             'bed'     => $job->file->metadata['bed_size'] ?? [256, 256],
-            'skipped' => array_map('intval', $this->printer->status['skipped_objects'] ?? []),
+            // vynechané tiskárnou + odstraněné z gcode už před odesláním
+            'skipped' => array_values(array_unique(array_merge(
+                array_map('intval', $this->printer->status['skipped_objects'] ?? []),
+                ($job->options['skip_mode'] ?? null) === 'gcode' ? array_map('intval', $job->options['skip_objects'] ?? []) : [],
+            ))),
         ];
     }
 
