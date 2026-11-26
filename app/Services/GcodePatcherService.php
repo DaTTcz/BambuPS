@@ -360,6 +360,309 @@ class GcodePatcherService
         return null;
     }
 
+    /** Brim: o kolik dál musí být tištěný objekt, aby se úsek vynechal (mm) */
+    private const BRIM_MARGIN = 1.0;
+
+    /** Brim: mřížka pro hledání nejbližšího objektu (mm) */
+    private const BRIM_CELL = 2.0;
+
+    /**
+     * Odebere brim vynechaných objektů - jen tam, kde je jasné, komu patří.
+     *
+     * Bambu/Orca píše brim v 1. vrstvě mimo bloky M624/M625 a brimy
+     * sousedních objektů často slije do jednoho. Každý úsek brimu proto
+     * posuzujeme po celých smyčkách (souvislá řada extruzí) - smyčka se
+     * odebere celá, nebo zůstane celá (viz pravidla níž). Co jasné není
+     * (slitá smyčka kolem obou objektů), zůstává - raději větší brim než
+     * useknutý.
+     *
+     * Odebraná extruze se nahradí přejezdem (se zatažením filamentu), ať se
+     * další tištěný úsek nenatáhne přes prázdné místo. Přejezdy, wipe
+     * a retrakce slicer zůstávají, stav filamentu se tím nemění.
+     *
+     * @param array<int,int> $idOfBit bit masky -> ID objektu
+     */
+    private function stripSkippedBrims(string $content, array $skipIds, array $idOfBit): string
+    {
+        if (!str_contains($content, '; FEATURE: Brim')) {
+            return $content;
+        }
+
+        // Rozsah 1. vrstvy (první a druhý "; CHANGE_LAYER")
+        $l1 = strpos($content, "; CHANGE_LAYER");
+        if ($l1 === false) {
+            return $content;
+        }
+        $l2 = strpos($content, "; CHANGE_LAYER", $l1 + 10);
+        $l2 = $l2 === false ? strlen($content) : $l2;
+        $layer = substr($content, $l1, $l2 - $l1);
+        if (!str_contains($layer, '; FEATURE: Brim')) {
+            return $content;
+        }
+
+        $lines = preg_split('/(?<=\n)/', $layer);
+
+        // 1) Geometrie objektů: body extruze 1. vrstvy v blocích jednoho objektu
+        $grid   = [];
+        $objSum = [];   // ID -> [Σx, Σy, n] pro střed objektu
+        $x = $y = null;
+        $stack = [];
+        $hasKept = $hasSkip = false;
+        foreach ($lines as $l) {
+            if (str_starts_with($l, 'M624 ')) {
+                $stack[] = $this->maskValue(strtok(substr($l, 5), " \t\r\n;"));
+                continue;
+            }
+            if (str_starts_with($l, 'M625')) {
+                array_pop($stack);
+                continue;
+            }
+            if (!preg_match('/^G[0-3](?:\s|$)/', $l)) {
+                continue;
+            }
+            $v  = $this->moveValues($l);
+            $nx = $v['X'] ?? $x;
+            $ny = $v['Y'] ?? $y;
+            $top = $stack ? end($stack) : 0;
+            if ($top && isset($idOfBit[$top]) && ($v['E'] ?? 0) > 0 && $x !== null && $nx !== null) {
+                $id = $idOfBit[$top];
+                // úsečku navzorkovat po ~1 mm
+                $n = max(1, (int) ceil(hypot($nx - $x, $ny - $y)));
+                for ($i = 0; $i <= $n; $i++) {
+                    $px = $x + ($nx - $x) * $i / $n;
+                    $py = $y + ($ny - $y) * $i / $n;
+                    $grid[(int) floor($px / self::BRIM_CELL)][(int) floor($py / self::BRIM_CELL)][$id] = [$px, $py];
+                    $objSum[$id][0] = ($objSum[$id][0] ?? 0) + $px;
+                    $objSum[$id][1] = ($objSum[$id][1] ?? 0) + $py;
+                    $objSum[$id][2] = ($objSum[$id][2] ?? 0) + 1;
+                }
+                in_array($id, $skipIds, true) ? $hasSkip = true : $hasKept = true;
+            }
+            $x = $nx;
+            $y = $ny;
+        }
+        if (!$hasSkip) {
+            return $content;
+        }
+
+        // Nejbližší vzdálenost k jednotlivým objektům (do ~30 mm)
+        $nearest = function (float $px, float $py) use ($grid): array {
+            $cx = (int) floor($px / self::BRIM_CELL);
+            $cy = (int) floor($py / self::BRIM_CELL);
+            $best = [];
+            for ($r = 0; $r <= 15; $r++) {
+                for ($i = $cx - $r; $i <= $cx + $r; $i++) {
+                    for ($j = $cy - $r; $j <= $cy + $r; $j++) {
+                        if (max(abs($i - $cx), abs($j - $cy)) !== $r || !isset($grid[$i][$j])) {
+                            continue;
+                        }
+                        foreach ($grid[$i][$j] as $id => [$gx, $gy]) {
+                            $d = hypot($gx - $px, $gy - $py);
+                            if (!isset($best[$id]) || $d < $best[$id]) {
+                                $best[$id] = $d;
+                            }
+                        }
+                    }
+                }
+                // dál už nic bližšího (o víc než okraj) nenajdeme
+                if ($best && ($r - 1) * self::BRIM_CELL > min($best) + self::BRIM_MARGIN + self::BRIM_CELL) {
+                    break;
+                }
+            }
+            return $best;
+        };
+        // 2) Smyčky brimu v 1. vrstvě (mimo bloky objektů) = souvislé řady extruzí.
+        //    Smyčka se odebere celá, nebo zůstane celá - jinak by zbyly srpky.
+        $n      = count($lines);
+        $pos    = [];          // index řádku -> [x0, y0, x1, y1] u extruzí brimu
+        $runOf  = [];          // index řádku -> číslo smyčky
+        $runs   = [];          // číslo smyčky -> [indexy]
+        $x = $y = null;
+        $depth  = 0;
+        $inBrim = false;
+        $run    = null;
+        for ($k = 0; $k < $n; $k++) {
+            $l = $lines[$k];
+            if (str_starts_with($l, 'M624 ')) {
+                $depth++;
+                $run = null;
+            } elseif (str_starts_with($l, 'M625')) {
+                $depth = max(0, $depth - 1);
+                $run = null;
+            } elseif (str_starts_with($l, '; FEATURE: ')) {
+                $inBrim = $depth === 0 && str_starts_with($l, '; FEATURE: Brim');
+                $run = null;
+            } elseif (str_starts_with($l, '; start printing object')) {
+                $inBrim = false;
+                $run = null;
+            }
+            if (!preg_match('/^G[0-3](?:\s|$)/', $l)) {
+                continue;
+            }
+            $v  = $this->moveValues($l);
+            $nx = $v['X'] ?? $x;
+            $ny = $v['Y'] ?? $y;
+            $extrudes = ($v['E'] ?? 0) > 0 && (isset($v['X']) || isset($v['Y']));
+            if ($inBrim && $depth === 0 && $extrudes && $x !== null && $nx !== null) {
+                if ($run === null) {
+                    $run = count($runs);
+                    $runs[$run] = [];
+                }
+                $runs[$run][] = $k;
+                $runOf[$k]    = $run;
+                $pos[$k]      = [$x, $y, $nx, $ny];
+            } elseif ($extrudes || isset($v['X']) || isset($v['Y'])) {
+                $run = null;   // přejezd nebo jiná extruze ukončí smyčku
+            }
+            $x = $nx;
+            $y = $ny;
+        }
+
+        // Komu smyčka patří:
+        //  a) objektu, ke kterému se nejvíc přiblíží - brim se u objektu ořezává
+        //     podle obrysu, takže se ho smyčka (i "ucho" ve tvaru C) dotýká;
+        //  b) když se dotýká vynechaného i tištěného (ořezaná o oba), rozhodne
+        //     střed smyčky - ucho leží středem u rohu svého objektu.
+        // Smyčka, která obepíná tištěný objekt (slitý brim kolem obou), zůstává.
+        $keptCenters = [];
+        foreach ($objSum as $id => [$sx, $sy, $cnt]) {
+            if (!in_array($id, $skipIds, true)) {
+                $keptCenters[] = [$sx / $cnt, $sy / $cnt];
+            }
+        }
+        $inside = function (array $poly, float $px, float $py): bool {
+            $in = false;
+            for ($a = 0, $b = count($poly) - 1; $a < count($poly); $b = $a++) {
+                [$xa, $ya] = $poly[$a];
+                [$xb, $yb] = $poly[$b];
+                if (($ya > $py) !== ($yb > $py) && $px < ($xb - $xa) * ($py - $ya) / (($yb - $ya) ?: 1e-9) + $xa) {
+                    $in = !$in;
+                }
+            }
+            return $in;
+        };
+        $splitSides = function (array $best) use ($skipIds): array {
+            $dSkip = $dKept = INF;
+            foreach ($best as $id => $d) {
+                in_array($id, $skipIds, true) ? $dSkip = min($dSkip, $d) : $dKept = min($dKept, $d);
+            }
+            return [$dSkip, $dKept];
+        };
+
+        $drop = [];   // index řádku => true
+        foreach ($runs as $idx) {
+            $minSkip = $minKept = INF;
+            $poly = [];
+            $sx = $sy = 0.0;
+            $runLen = 0.0;
+            foreach ($idx as $k) {
+                [$x0, $y0, $x1, $y1] = $pos[$k];
+                $runLen += hypot($x1 - $x0, $y1 - $y0);
+                if (!$poly) {
+                    $poly[] = [$x0, $y0];
+                }
+                $poly[] = [$x1, $y1];
+                foreach ([[$x0, $y0], [($x0 + $x1) / 2, ($y0 + $y1) / 2], [$x1, $y1]] as [$px, $py]) {
+                    [$ds, $dk] = $splitSides($nearest($px, $py));
+                    $minSkip = min($minSkip, $ds);
+                    $minKept = min($minKept, $dk);
+                }
+            }
+            if ($minSkip === INF) {
+                continue;                                   // u vynechaného vůbec neleží
+            }
+            if ($minKept - $minSkip > self::BRIM_MARGIN) {
+                $own = true;                                // a) jednoznačně jeho
+            } elseif ($minSkip - $minKept > self::BRIM_MARGIN) {
+                $own = false;                               // jednoznačně tištěného
+            } else {
+                foreach ($poly as [$px, $py]) {
+                    $sx += $px;
+                    $sy += $py;
+                }
+                [$ds, $dk] = $splitSides($nearest($sx / count($poly), $sy / count($poly)));
+                $own = $ds < INF && ($dk - $ds > self::BRIM_MARGIN
+                    || ($runLen < 10.0 && $ds < $dk));               // b) podle středu; drobné zbytky stačí blíž
+            }
+            if ($own && count($poly) >= 3) {
+                foreach ($keptCenters as [$cx, $cy]) {
+                    if ($inside($poly, $cx, $cy)) {
+                        $own = false;                       // obepíná tištěný objekt
+                        break;
+                    }
+                }
+            }
+            if ($own) {
+                foreach ($idx as $k) {
+                    $drop[$k] = true;
+                }
+            }
+        }
+        $removed = count($drop);
+        $keptSeg = count($runOf) - $removed;
+
+        // 3) Výstup: odebrané extruze vynechat; když po nich tištěná extruze
+        //    navazuje bez přejezdu, vložit přejezd se zatažením filamentu
+        $out  = [];
+        $gap  = false;
+        $x = $y = null;
+        $feed = null;
+        for ($k = 0; $k < $n; $k++) {
+            $l = $lines[$k];
+            if (!preg_match('/^G[0-3](?:\s|$)/', $l)) {
+                $out[] = $l;
+                continue;
+            }
+            $v  = $this->moveValues($l);
+            $nx = $v['X'] ?? $x;
+            $ny = $v['Y'] ?? $y;
+            if (isset($v['F'])) {
+                $feed = $v['F'];
+            }
+            if (isset($drop[$k])) {
+                $gap = true;
+                $x = $nx;
+                $y = $ny;
+                continue;
+            }
+            $extrudes = ($v['E'] ?? 0) > 0 && (isset($v['X']) || isset($v['Y']));
+            if ($gap && $extrudes) {
+                $out[] = "G1 E-.8 F1800 ; BambuPS: přejezd přes vynechaný brim\n";
+                $out[] = sprintf("G1 X%.3f Y%.3f F24000\n", $x, $y);
+                $out[] = "G1 E.8 F1800\n";
+                if ($feed && !isset($v['F'])) {
+                    $out[] = 'G1 F' . rtrim(rtrim(sprintf('%.3f', $feed), '0'), '.') . "\n";
+                }
+            }
+            if (isset($v['X']) || isset($v['Y'])) {
+                $gap = false;   // absolutní pohyb - poloha zase sedí
+            }
+            $out[] = $l;
+            $x = $nx;
+            $y = $ny;
+        }
+
+        if ($removed === 0) {
+            return $content;
+        }
+        $this->notes[] = "brim vynechaných objektů: {$removed} z " . ($removed + $keptSeg) . ' úseků';
+
+        return substr($content, 0, $l1) . implode('', $out) . substr($content, $l2);
+    }
+
+    /** Hodnoty X/Y/Z/E/F z řádku pohybu (bez komentáře) */
+    private function moveValues(string $line): array
+    {
+        $code = strstr($line, ';', true);
+        $code = $code === false ? $line : $code;
+        preg_match_all('/([XYZEF])(-?[\d.]+)/', $code, $mm, PREG_SET_ORDER);
+        $v = [];
+        foreach ($mm as $m) {
+            $v[$m[1]] = (float) $m[2];
+        }
+        return $v;
+    }
+
     /**
      * Odstraní z gcode vynechané objekty.
      *
@@ -371,6 +674,7 @@ class GcodePatcherService
      * průběh) zůstávají. Každý blok si na začátku sám nastaví Z, XY i
      * vytažení filamentu, takže vynechání nenaruší zbytek tisku.
      */
+
     private function patchSkipObjectsContent(string $content, array $skipIds): string
     {
         // ID objektu -> bit masky ("; start printing object, unique label id: N" + M624 hned za ním)
@@ -393,6 +697,10 @@ class GcodePatcherService
         if ($skipMask === 0) {
             return $content;
         }
+
+        // Brimy jsou mimo bloky objektů (M624/M625) - každý těsně před
+        // blokem objektu, ke kterému patří. Vynechanému objektu je odebereme.
+        $content = $this->stripSkippedBrims($content, array_map('intval', $skipIds), array_flip($bitOf));
 
         $out     = fopen('php://temp/maxmemory:' . (128 * 1024 * 1024), 'w+');
         $stack   = [];
