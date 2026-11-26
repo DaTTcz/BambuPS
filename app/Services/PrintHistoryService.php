@@ -118,6 +118,7 @@ class PrintHistoryService
             ->latest('id')
             ->first();
         if ($recentExternal) {
+            Log::info("Historie [{$printer->name}]: externí tisk #{$recentExternal->id} převzat jako úloha z appky (task_id {$taskId})");
             $recentExternal->update($data + ['task_id' => $taskId ?: $recentExternal->task_id]);
             self::fillMeshBedType($printer, $recentExternal->fresh());
             return $recentExternal;
@@ -127,6 +128,8 @@ class PrintHistoryService
         PrintJob::where('printer_id', $printer->id)
             ->where('status', PrintJob::STATUS_QUEUED)
             ->delete();
+
+        Log::info("Historie [{$printer->name}]: odeslán tisk {$file->original_name}, task_id={$taskId}");
 
         return PrintJob::create([
             'printer_id'        => $printer->id,
@@ -180,6 +183,8 @@ class PrintHistoryService
                 // jen teď dostal správné task_id. Příprava (ohřev, měření
                 // podložky, kalibrace) umí trvat i přes 10 minut.
                 if ($open->started_at && $open->started_at->gt(now()->subMinutes(self::PREPARE_MINUTES))) {
+                    Log::info("Historie [{$printer->name}]: task_id {$open->task_id} -> {$taskId} u #{$open->id} ({$open->source})"
+                        . ($queued ? ", nahrazen úlohou z appky #{$queued->id}" : ''));
                     if ($queued) {
                         $open->delete();
                         $this->promote($queued, $status, (bool) $open->bed_leveled);
@@ -198,6 +203,8 @@ class PrintHistoryService
                 $this->close($open, PrintJob::STATUS_CANCELLED, $prev, $status, false);
             }
 
+            Log::info("Historie [{$printer->name}]: start {$state} task_id={$taskId} subtask_id=" . ($status['subtask_id'] ?? '-')
+                . ' -> ' . ($queued ? "úloha z appky #{$queued->id} (task_id {$queued->task_id})" : 'externí tisk'));
             $queued ? $this->promote($queued, $status) : $this->createExternal($printer, $taskId, $status);
             $this->cleanupQueued($printer);
             return;

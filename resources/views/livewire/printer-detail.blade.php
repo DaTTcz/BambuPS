@@ -190,7 +190,7 @@
                     'skipped' => $jobObj['skipped'],
                     'locked'  => $jobObj['skipped'],
                     'action'  => 'skipObjectLive',
-                    'confirm' => 'Vynechat tento objekt? Tiskárna ho přestane tisknout a vrátit to nepůjde.',
+                    'confirm' => 'Tiskárna ho přestane tisknout a vrátit to nepůjde.',
                 ])
                 <p class="text-xs text-gray-400 mt-1">Kliknutím na objekt ho vynecháš – třeba když se odlepil. Vrátit to nejde.</p>
             </div>

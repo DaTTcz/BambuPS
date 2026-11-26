@@ -108,6 +108,7 @@
                                                         @if($camRes !== $res)
                                                             wire:click="setCameraResolution({{ $printer->id }}, '{{ $res }}')"
                                                             wire:confirm="Přepnout kameru {{ $printer->name }} na {{ $res }}? Obraz bude asi 30 s nedostupný."
+                                                            data-confirm-title="Rozlišení kamery" data-confirm-ok="Přepnout"
                                                         @endif
                                                         @disabled(!$printer->is_online)
                                                         class="px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed
@@ -199,7 +200,8 @@
                                             <p class="text-xs text-gray-400 dark:text-bambu-text-dim">Vytvořen: {{ $token->created_at->local()->format('d.m.Y H:i') }}</p>
                                         </div>
                                         <button wire:click="deleteToken({{ $token->id }})"
-                                            wire:confirm="Opravdu smazat token?"
+                                            wire:confirm="Opravdu smazat token? Slicer, který ho používá, se přestane připojovat."
+                                            data-confirm-title="Smazat token" data-confirm-ok="Smazat" data-confirm-danger
                                             class="px-3 py-1 text-xs bg-red-100 dark:bg-red-900/30 hover:bg-red-200 text-red-700 dark:text-red-400 rounded-lg">
                                             Smazat
                                         </button>

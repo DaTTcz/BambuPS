@@ -102,15 +102,29 @@ class GcodePatcherService
             if ($skipObjects) {
                 $content = $this->patchSkipObjectsContent($content, $skipObjects);
 
-                // Odhad času v slice_info (tiskárna ho ukáže při startu)
+                // slice_info: odhad času (tiskárna ho ukáže při startu) a objekty
+                // označené jako vynechané - jinak je tiskárna nabízí k vynechání
+                // dál a v jejím seznamu vypadají, že se tisknou
                 $si = $zip->getFromName('Metadata/slice_info.config');
-                if ($si !== false && $this->timeRatio < 1.0) {
-                    $si = preg_replace_callback('/<plate>.*?<\/plate>/s', function ($pm) use ($plateIndex) {
+                if ($si !== false) {
+                    $skipSet = array_map('intval', $skipObjects);
+                    $si = preg_replace_callback('/<plate>.*?<\/plate>/s', function ($pm) use ($plateIndex, $skipSet) {
                         if (!preg_match('/key="index" value="' . $plateIndex . '"/', $pm[0])) {
                             return $pm[0];
                         }
-                        return preg_replace_callback('/(key="prediction" value=")(\d+)(")/', fn ($x) =>
-                            $x[1] . (int) round($x[2] * $this->timeRatio) . $x[3], $pm[0]);
+                        $plate = $pm[0];
+                        if ($this->timeRatio < 1.0) {
+                            $plate = preg_replace_callback('/(key="prediction" value=")(\d+)(")/', fn ($x) =>
+                                $x[1] . (int) round($x[2] * $this->timeRatio) . $x[3], $plate);
+                        }
+                        return preg_replace_callback('/<object\b[^>]*>/', function ($om) use ($skipSet) {
+                            if (!preg_match('/identify_id="(\d+)"/', $om[0], $id) || !in_array((int) $id[1], $skipSet, true)) {
+                                return $om[0];
+                            }
+                            return str_contains($om[0], 'skipped="')
+                                ? preg_replace('/skipped="[^"]*"/', 'skipped="true"', $om[0])
+                                : preg_replace('/\s*\/?>$/', ' skipped="true"$0', $om[0], 1);
+                        }, $plate);
                     }, $si);
                     $zip->addFromString('Metadata/slice_info.config', $si);
                 }

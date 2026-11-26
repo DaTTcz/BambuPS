@@ -52,6 +52,7 @@
                             </button>
                             <button wire:click="delete({{ $printer->id }})"
                                 wire:confirm="Opravdu smazat tiskárnu {{ $printer->name }}?"
+                                data-confirm-title="Smazat tiskárnu" data-confirm-ok="Smazat" data-confirm-danger
                                 class="px-3 py-1.5 text-sm bg-red-100 dark:bg-red-900/30 hover:bg-red-200 text-red-700 dark:text-red-400 rounded-lg">
                                 🗑️ Smazat
                             </button>

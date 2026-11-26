@@ -53,9 +53,11 @@
                             @elseif($cmp === 1)
                                 <button wire:click="switchTo('{{ $r['tag'] }}')"
                                     wire:confirm="Aktualizovat na {{ $r['tag'] }}? Před aktualizací se automaticky zazálohuje databáze."
+                                    data-confirm-title="Aktualizace" data-confirm-ok="Aktualizovat"
                                     class="px-2.5 py-1 text-xs rounded-lg font-medium bg-green-600 hover:bg-green-700 text-white shrink-0">⬆️ Aktualizovat</button>
                             @else
                                 <button wire:click="switchTo('{{ $r['tag'] }}')"
+                                    data-confirm-title="Návrat na starší verzi" data-confirm-ok="Vrátit se"
                                     wire:confirm="Vrátit se na starší verzi {{ $r['tag'] }}?&#10;&#10;Databáze se před přechodem zazálohuje, data z novějších funkcí zůstanou zachovaná a znovu se objeví po návratu na novou verzi. Funkce přidané po {{ $r['tag'] }} nebudou dostupné."
                                     class="px-2.5 py-1 text-xs rounded-lg font-medium bg-gray-100 dark:bg-bambu-dark-3 hover:bg-gray-200 dark:hover:bg-bambu-dark-4 text-gray-700 dark:text-bambu-text shrink-0">↩️ Vrátit se</button>
                             @endif
@@ -104,7 +106,7 @@
                             class="p-1 text-gray-400 hover:text-green-600 text-xs shrink-0">⬇️</a>
                         <button wire:click="askRestore('{{ $b['name'] }}')" title="Obnovit"
                             class="px-2 py-0.5 text-xs rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 shrink-0">Obnovit</button>
-                        <button wire:click="deleteBackup('{{ $b['name'] }}')" wire:confirm="Smazat zálohu z {{ $b['created_at']->local()->format('d.m.Y H:i') }}?" title="Smazat"
+                        <button wire:click="deleteBackup('{{ $b['name'] }}')" wire:confirm="Smazat zálohu z {{ $b['created_at']->local()->format('d.m.Y H:i') }}?" data-confirm-title="Smazat zálohu" data-confirm-ok="Smazat" data-confirm-danger title="Smazat"
                             class="p-1 text-gray-300 dark:text-bambu-dark-5 hover:text-red-600 text-xs shrink-0">🗑️</button>
                     </div>
                 @endforeach

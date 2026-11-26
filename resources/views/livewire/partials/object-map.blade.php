@@ -6,7 +6,7 @@
       $skipped  int[] ID vynechaných objektů
       $action   název Livewire metody, která dostane ID objektu (např. 'toggleSkipObject')
       $locked   int[] ID, které už nejdou vrátit (vynechané tiskárnou během tisku)
-      $confirm  volitelně text potvrzení před kliknutím (wire:confirm)
+      $confirm  volitelně text potvrzení před kliknutím (wire:confirm -> vlastní okno, viz confirm-dialog)
 --}}
 @php
     $locked  = $locked ?? [];
@@ -42,7 +42,7 @@
                     $isLock  = in_array($o['id'], $locked, true);
                     $rx = $x1; $ry = $bedH - $y2; $rw = max(1, $x2 - $x1); $rh = max(1, $y2 - $y1);
                 @endphp
-                <g wire:key="obj-map-{{ $o['id'] }}" @if(!$isLock) wire:click="{{ $action }}({{ $o['id'] }})" @if($confirm) wire:confirm="{{ $confirm }}" @endif style="cursor: pointer;" @endif>
+                <g wire:key="obj-map-{{ $o['id'] }}" @if(!$isLock) wire:click="{{ $action }}({{ $o['id'] }})" @if($confirm) wire:confirm="{{ $confirm }}" data-confirm-title="Vynechat #{{ $n + 1 }} {{ $o['name'] }}?" data-confirm-ok="Vynechat" data-confirm-danger @endif style="cursor: pointer;" @endif>
                     <title>#{{ $n + 1 }} {{ $o['name'] }}{{ $isSkip ? ' – vynecháno' : '' }}</title>
                     @if(!empty($o['outline']))
                         {{-- Skutečný obrys 1. vrstvy (vnější stěny), díry přes evenodd --}}
@@ -84,7 +84,7 @@
             @endphp
             <label wire:key="obj-list-{{ $o['id'] }}" class="flex items-center gap-2 text-sm rounded-lg px-2 py-1 {{ $isLock ? 'opacity-60' : 'cursor-pointer hover:bg-gray-100 dark:hover:bg-bambu-dark-3' }}">
                 <input type="checkbox" class="rounded text-green-600" @checked(!$isSkip) @disabled($isLock) onclick="event.preventDefault()"
-                    @if(!$isLock) wire:click="{{ $action }}({{ $o['id'] }})" @if($confirm) wire:confirm="{{ $confirm }}" @endif @endif>
+                    @if(!$isLock) wire:click="{{ $action }}({{ $o['id'] }})" @if($confirm) wire:confirm="{{ $confirm }}" data-confirm-title="Vynechat #{{ $n + 1 }} {{ $o['name'] }}?" data-confirm-ok="Vynechat" data-confirm-danger @endif @endif>
                 <span class="font-mono text-xs w-6 text-gray-400">#{{ $n + 1 }}</span>
                 <span class="truncate {{ $isSkip ? 'line-through text-gray-400' : 'text-gray-700 dark:text-bambu-text' }}">{{ $o['name'] }}</span>
                 @if($isLock)<span class="text-xs text-red-500 shrink-0">vynecháno</span>@endif
