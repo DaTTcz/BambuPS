@@ -131,23 +131,13 @@ class PrintHistoryService
 
         Log::info("Historie [{$printer->name}]: odeslán tisk {$file->original_name}, task_id={$taskId}");
 
+        // Vše z $data (vč. podložky, změn a voleb dialogu) + údaje o tiskárně
         return PrintJob::create([
-            'printer_id'        => $printer->id,
-            'file_id'           => $file->id,
-            'user_id'           => $userId,
-            'printer_name'      => $printer->name,
-            'name'              => pathinfo($file->original_name, PATHINFO_FILENAME),
-            'plate_index'       => $plateIndex,
-            'source'            => 'bambups',
-            'task_id'           => $taskId,
-            'status'            => PrintJob::STATUS_QUEUED,
-            'estimated_seconds' => $estimated ? (int) $estimated : null,
-            'total_layers'      => $plate['total_layer_num'] ?? null,
-            'filament_g'        => $filamentG !== null ? round((float) $filamentG, 2) : null,
-            'waste_g'           => $wasteG,
-            'filament_changes'  => $plate['filament_changes'] ?? null,
-            'filaments'         => $filaments ?: null,
-        ]);
+            'printer_id'   => $printer->id,
+            'printer_name' => $printer->name,
+            'task_id'      => $taskId,
+            'status'       => PrintJob::STATUS_QUEUED,
+        ] + $data);
     }
 
     public function sync(Printer $printer, array $prev, array $status): void
