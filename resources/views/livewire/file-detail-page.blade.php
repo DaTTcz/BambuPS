@@ -475,20 +475,25 @@
                         $dlgCanSkip = $dlgObjects && \App\Models\Printer::find($printPrinterId)?->supports(\App\Printers\Capability::SKIP_OBJECTS);
                     @endphp
                     @if($dlgCanSkip)
-                        <div class="mb-5">
-                            <div class="flex items-center justify-between mb-2">
-                                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Objekty na desce</p>
+                        {{-- Sbalené, ať zbytečně nenatahuje okno; otevřené, když už je něco vynechané --}}
+                        <div class="mb-5 rounded-lg border border-gray-200 dark:border-bambu-dark-4"
+                            x-data="{ open: {{ $skipObjects ? 'true' : 'false' }} }">
+                            <button type="button" x-on:click="open = !open" class="w-full px-3 py-2 flex items-center justify-between text-left">
+                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Objekty na desce</span>
                                 <span class="text-xs {{ $skipObjects ? 'text-amber-600 font-medium' : 'text-gray-400' }}">
                                     Tisknout {{ count($dlgObjects) - count($skipObjects) }} z {{ count($dlgObjects) }}
+                                    <span class="ml-1 text-gray-400" x-text="open ? '▲' : '▼'"></span>
                                 </span>
+                            </button>
+                            <div x-show="open" x-cloak class="px-3 pb-3">
+                                @include('livewire.partials.object-map', [
+                                    'objects' => $dlgObjects,
+                                    'bed'     => $file->metadata['bed_size'] ?? [256, 256],
+                                    'skipped' => $skipObjects,
+                                    'action'  => 'toggleSkipObject',
+                                ])
+                                <p class="text-xs text-gray-400 mt-1">Kliknutím na objekt ho vynecháš. Do tiskárny se pošle upravená kopie souboru bez vynechaných objektů, originál zůstane beze změny.</p>
                             </div>
-                            @include('livewire.partials.object-map', [
-                                'objects' => $dlgObjects,
-                                'bed'     => $file->metadata['bed_size'] ?? [256, 256],
-                                'skipped' => $skipObjects,
-                                'action'  => 'toggleSkipObject',
-                            ])
-                            <p class="text-xs text-gray-400 mt-1">Kliknutím na objekt ho vynecháš. Do tiskárny se pošle upravená kopie souboru bez vynechaných objektů, originál zůstane beze změny.</p>
                         </div>
                     @endif
 
